@@ -87,6 +87,7 @@ export type SieveApi = {
     delete: (name: string) => Promise<void>
     check: (body: string) => Promise<CheckDiagnostic[]>
     capabilities: () => Promise<Capabilities | null>
+    onDisconnected: (cb: (reason: string) => void) => () => void
   }
   prefs: {
     get: () => Promise<EditorPrefs>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte'
   import Login from './Login.svelte'
   import SieveEditor from './SieveEditor.svelte'
   import ScriptTree from './ScriptTree.svelte'
@@ -33,6 +34,7 @@
   let checkSeq = 0
   let indentWithTabs = $state(DEFAULT_INDENT_WITH_TABS)
   let tabSize = $state(DEFAULT_TAB_SIZE)
+  let lastInput = $state<AccountInput | null>(null)
 
   const dirty = $derived(body !== original)
   const keywords = $derived(capabilities?.sieve ?? [])
@@ -74,37 +76,67 @@
       bodiesNext && Object.keys(bodiesNext).length ? bodiesNext : await loadBodies(scriptsNext)
   }
 
-  async function connect(input: AccountInput): Promise<void> {
+  async function connect(input: AccountInput, resume = false): Promise<void> {
     busy = true
     error = ''
     try {
       const result: ConnectResult = await window.api.sieve.connect(input)
+      lastInput = { ...input, id: result.account.id }
       account = result.account
       capabilities = result.capabilities
       await applySnapshot(result.scripts, result.bodies)
       connected = true
-      const preferred =
-        account.lastScript && scripts.some((s) => s.name === account!.lastScript)
-          ? account.lastScript
-          : scripts.find((s) => s.active)?.name || scripts[0]?.name || null
-      if (preferred) await openScript(preferred)
-      else {
-        currentName = null
-        draftName = 'untitled'
-        body = ''
-        original = ''
+      status = 'Connected'
+      if (!resume) {
+        const preferred =
+          account.lastScript && scripts.some((s) => s.name === account!.lastScript)
+            ? account.lastScript
+            : scripts.find((s) => s.active)?.name || scripts[0]?.name || null
+        if (preferred) await openScript(preferred)
+        else {
+          currentName = null
+          draftName = 'untitled'
+          body = ''
+          original = ''
+        }
       }
       await loadAccounts()
     } catch (err) {
       error = err instanceof Error ? err.message : String(err)
+      if (resume) connected = false
     } finally {
       busy = false
     }
   }
 
+  function markDisconnected(reason: string): void {
+    if (!account) return
+    connected = false
+    error = reason
+    status = reason
+  }
+
+  function lost(err: unknown): boolean {
+    const message = err instanceof Error ? err.message : String(err)
+    if (/not connected|connection lost|idle timeout|econnreset|epipe|socket timeout/i.test(message)) {
+      markDisconnected('Connection lost')
+      return true
+    }
+    return false
+  }
+
+  async function reconnect(): Promise<void> {
+    if (!lastInput) return
+    await connect(lastInput, true)
+  }
+
   async function openScript(name: string): Promise<void> {
     if (name === currentName) return
     if (dirty && !confirm('Discard unsaved changes?')) return
+    if (!connected) {
+      error = 'Not connected'
+      return
+    }
     busy = true
     error = ''
     try {
@@ -116,7 +148,7 @@
       status = ''
       scheduleCheck(body)
     } catch (err) {
-      error = err instanceof Error ? err.message : String(err)
+      if (!lost(err)) error = err instanceof Error ? err.message : String(err)
     } finally {
       busy = false
     }
@@ -147,13 +179,18 @@
 
   async function runCheck(seq: number, text: string, local: CheckDiagnostic[]): Promise<void> {
     if (seq !== checkSeq) return
+    if (!connected) {
+      diagnostics = local
+      return
+    }
     try {
       const server = await window.api.sieve.check(text)
       if (seq !== checkSeq) return
       diagnostics = mergeDiagnostics(local, server)
-    } catch {
+    } catch (err) {
       if (seq !== checkSeq) return
       diagnostics = local
+      lost(err)
     }
   }
 
@@ -193,7 +230,7 @@
       status = `Saved ${name}`
       scheduleCheck(body)
     } catch (err) {
-      error = err instanceof Error ? err.message : String(err)
+      if (!lost(err)) error = err instanceof Error ? err.message : String(err)
     } finally {
       busy = false
     }
@@ -208,7 +245,7 @@
       await refreshList()
       status = `Active: ${name}`
     } catch (err) {
-      error = err instanceof Error ? err.message : String(err)
+      if (!lost(err)) error = err instanceof Error ? err.message : String(err)
     } finally {
       busy = false
     }
@@ -228,7 +265,7 @@
       await refreshList()
       status = `Deleted ${name}`
     } catch (err) {
-      error = err instanceof Error ? err.message : String(err)
+      if (!lost(err)) error = err instanceof Error ? err.message : String(err)
     } finally {
       busy = false
     }
@@ -237,20 +274,16 @@
   async function disconnect(): Promise<void> {
     await window.api.sieve.disconnect()
     connected = false
-    account = null
-    scripts = []
-    bodies = {}
-    currentName = null
-    body = ''
-    original = ''
     error = ''
-    await loadAccounts()
+    status = 'Disconnected'
   }
+
+  onMount(() => window.api.sieve.onDisconnected((reason) => markDisconnected(reason)))
 
   void loadAccounts()
 </script>
 
-{#if !connected}
+{#if !account}
   <Login {accounts} {busy} {error} onconnect={connect} />
 {:else}
   <div class="flex h-full min-h-0 flex-col">
@@ -260,7 +293,11 @@
           {account?.username}@{account?.host}:{account?.port}
         </div>
         <div class="truncate text-xs text-zinc-400">
-          {capabilities?.implementation ?? 'ManageSieve'}
+          {#if connected}
+            {capabilities?.implementation ?? 'ManageSieve'}
+          {:else}
+            <span class="text-warn">Disconnected</span>
+          {/if}
           {#if dirty}<span class="text-warn"> • unsaved</span>{/if}
         </div>
       </div>
@@ -272,13 +309,13 @@
       <button class="rounded border border-line px-3 py-1 text-sm" onclick={newScript} disabled={busy}>
         New
       </button>
-      <button class="rounded bg-accent px-3 py-1 text-sm text-ink disabled:opacity-50" onclick={save} disabled={busy}>
+      <button class="rounded bg-accent px-3 py-1 text-sm text-ink disabled:opacity-50" onclick={save} disabled={busy || !connected}>
         Save
       </button>
-      <button class="rounded border border-line px-3 py-1 text-sm" onclick={activate} disabled={busy || !currentName}>
+      <button class="rounded border border-line px-3 py-1 text-sm" onclick={activate} disabled={busy || !connected || !currentName}>
         Activate
       </button>
-      <button class="rounded border border-bad/50 px-3 py-1 text-sm text-red-300" onclick={remove} disabled={busy || !currentName}>
+      <button class="rounded border border-bad/50 px-3 py-1 text-sm text-red-300" onclick={remove} disabled={busy || !connected || !currentName}>
         Delete
       </button>
       <label class="flex items-center gap-1 text-xs text-zinc-400" title="Indent with tabs or spaces">
@@ -308,7 +345,19 @@
           <option value="8">8</option>
         </select>
       </label>
-      <button class="rounded border border-line px-3 py-1 text-sm" onclick={disconnect}>Disconnect</button>
+      {#if connected}
+        <button class="rounded border border-line px-3 py-1 text-sm" onclick={disconnect} disabled={busy}>
+          Disconnect
+        </button>
+      {:else}
+        <button
+          class="rounded bg-accent px-3 py-1 text-sm text-ink disabled:opacity-50"
+          onclick={reconnect}
+          disabled={busy || !lastInput}
+        >
+          {busy ? 'Connecting…' : 'Connect'}
+        </button>
+      {/if}
     </header>
 
     <div class="flex min-h-0 flex-1">

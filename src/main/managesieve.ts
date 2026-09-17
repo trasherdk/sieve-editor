@@ -114,6 +114,8 @@ export class ManageSieveClient {
     starttls: false,
     checkscript: false
   }
+  onDrop: ((reason: string) => void) | null = null
+  private suppressDrop = false
 
   private enqueue<T>(fn: () => Promise<T>): Promise<T> {
     const run = this.queue.then(fn, fn)
@@ -130,6 +132,7 @@ export class ManageSieveClient {
 
   private async connectInner(opts: ConnectOptions): Promise<Capabilities> {
     await this.closeSocket()
+    this.suppressDrop = false
     this.knownNames.clear()
     this.checkscriptFailed = false
     const timeoutMs = opts.timeoutMs ?? 15000
@@ -339,6 +342,13 @@ export class ManageSieveClient {
   private onClose = (): void => {
     const waiters = this.waiters.splice(0)
     for (const w of waiters) w(Buffer.alloc(0))
+    const sock = this.socket
+    this.socket = null
+    if (sock) this.detachSocket(sock)
+    if (this.suppressDrop) return
+    const cb = this.onDrop
+    this.onDrop = null
+    cb?.('Connection lost')
   }
 
   private requireSocket(): SocketLike {
@@ -433,6 +443,8 @@ export class ManageSieveClient {
   }
 
   private async closeSocket(): Promise<void> {
+    this.suppressDrop = true
+    this.onDrop = null
     const sock = this.socket
     this.socket = null
     this.buffer = Buffer.alloc(0)

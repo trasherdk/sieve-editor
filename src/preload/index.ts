@@ -19,7 +19,12 @@ const api: SieveApi = {
     deactivate: () => ipcRenderer.invoke('sieve:deactivate'),
     delete: (name: string) => ipcRenderer.invoke('sieve:delete', name),
     check: (body: string) => ipcRenderer.invoke('sieve:check', body),
-    capabilities: () => ipcRenderer.invoke('sieve:capabilities')
+    capabilities: () => ipcRenderer.invoke('sieve:capabilities'),
+    onDisconnected: (cb) => {
+      const listener = (_event: unknown, reason: string): void => cb(reason)
+      ipcRenderer.on('sieve:disconnected', listener)
+      return () => ipcRenderer.removeListener('sieve:disconnected', listener)
+    }
   },
   prefs: {
     get: () => ipcRenderer.invoke('prefs:get'),

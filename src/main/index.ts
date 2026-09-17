@@ -30,11 +30,15 @@ let idleTimer: ReturnType<typeof setTimeout> | null = null
 function touchIdle(): void {
   if (idleTimer) clearTimeout(idleTimer)
   idleTimer = setTimeout(() => {
-    void disconnect()
+    void dropSession('Idle timeout', true)
   }, IDLE_MS)
 }
 
-async function disconnect(): Promise<void> {
+function notifyDisconnected(reason: string): void {
+  mainWindow?.webContents.send('sieve:disconnected', reason)
+}
+
+async function dropSession(reason: string, notify: boolean): Promise<void> {
   if (idleTimer) {
     clearTimeout(idleTimer)
     idleTimer = null
@@ -43,7 +47,29 @@ async function disconnect(): Promise<void> {
   client = null
   connectedAccountId = null
   lastCapabilities = null
-  if (c) await c.logout()
+  if (c) {
+    c.onDrop = null
+    await c.logout()
+  }
+  if (notify) notifyDisconnected(reason)
+}
+
+async function disconnect(): Promise<void> {
+  await dropSession('Disconnected', false)
+}
+
+function bindClientDrop(c: ManageSieveClient): void {
+  c.onDrop = (reason) => {
+    if (client !== c) return
+    if (idleTimer) {
+      clearTimeout(idleTimer)
+      idleTimer = null
+    }
+    client = null
+    connectedAccountId = null
+    lastCapabilities = null
+    notifyDisconnected(reason)
+  }
 }
 
 function requireClient(): ManageSieveClient {
@@ -144,6 +170,7 @@ function registerIpc(): void {
         tlsMode: input.tlsMode,
         rejectUnauthorized: input.rejectUnauthorized
       })
+      bindClientDrop(next)
       client = next
       connectedAccountId = saved.id
       touchIdle()
