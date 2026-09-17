@@ -1,0 +1,47 @@
+{
+  "id": "0000_init",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "sqlite",
+  "tables": {
+    "accounts": {
+      "name": "accounts",
+      "columns": {
+        "id": { "name": "id", "type": "integer", "primaryKey": true, "notNull": true, "autoincrement": true },
+        "host": { "name": "host", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "port": { "name": "port", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "username": { "name": "username", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "tls_mode": { "name": "tls_mode", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false, "default": "'starttls'" },
+        "reject_unauthorized": { "name": "reject_unauthorized", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false, "default": 1 },
+        "last_script": { "name": "last_script", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "password_enc": { "name": "password_enc", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "last_used_at": { "name": "last_used_at", "type": "integer", "primaryKey": false, "notNull": false, "autoincrement": false }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "settings": {
+      "name": "settings",
+      "columns": {
+        "id": { "name": "id", "type": "integer", "primaryKey": true, "notNull": true, "autoincrement": false, "default": 1 },
+        "last_account_id": { "name": "last_account_id", "type": "integer", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "window_x": { "name": "window_x", "type": "integer", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "window_y": { "name": "window_y", "type": "integer", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "window_width": { "name": "window_width", "type": "integer", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "window_height": { "name": "window_height", "type": "integer", "primaryKey": false, "notNull": false, "autoincrement": false }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": { "schemas": {}, "tables": {}, "columns": {} },
+  "internal": { "indexes": {} }
+}
