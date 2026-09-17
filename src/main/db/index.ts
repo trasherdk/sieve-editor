@@ -5,7 +5,8 @@ import Database from 'better-sqlite3'
 import { eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
-import type { AccountInput, AccountRecord, TlsMode } from '../../shared/types'
+import type { AccountInput, AccountRecord, EditorPrefs, TlsMode } from '../../shared/types'
+import { DEFAULT_INDENT_WITH_TABS, DEFAULT_TAB_SIZE } from '../../shared/types'
 import { accounts, settings } from './schema'
 
 let sqlite: Database.Database | null = null
@@ -144,6 +145,28 @@ export function saveWindowBounds(bounds: { x: number; y: number; width: number; 
     })
     .where(eq(settings.id, 1))
     .run()
+}
+
+function clampTabSize(n: number): number {
+  if (!Number.isFinite(n)) return DEFAULT_TAB_SIZE
+  return Math.min(8, Math.max(1, Math.round(n)))
+}
+
+export function getEditorPrefs(): EditorPrefs {
+  const row = openDb().select().from(settings).where(eq(settings.id, 1)).get()
+  return {
+    indentWithTabs: row?.indentWithTabs ?? DEFAULT_INDENT_WITH_TABS,
+    tabSize: clampTabSize(row?.tabSize ?? DEFAULT_TAB_SIZE)
+  }
+}
+
+export function saveEditorPrefs(prefs: EditorPrefs): EditorPrefs {
+  const next = {
+    indentWithTabs: Boolean(prefs.indentWithTabs),
+    tabSize: clampTabSize(prefs.tabSize)
+  }
+  openDb().update(settings).set(next).where(eq(settings.id, 1)).run()
+  return next
 }
 
 export function closeDb(): void {

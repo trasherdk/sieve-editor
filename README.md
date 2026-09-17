@@ -58,7 +58,7 @@ The server cert is issued by private CA **Trader Internet Root CA**. Node’s Mo
 No MySQL. Drizzle ORM + **better-sqlite3** in main only.
 
 - File: `sieve.sqlite` under Electron `app.getPath('userData')` (not in this repo)
-- Tables: `accounts` (host, port, user, TLS prefs, last script), `settings` (window bounds, last account)
+- Tables: `accounts` (host, port, user, TLS prefs, last script), `settings` (window bounds, last account, indent)
 - Passwords: `safeStorage.encryptString` (Windows DPAPI), ciphertext in SQLite — never plaintext, never committed
 - Migrations: [`drizzle/`](drizzle/) — applied on startup
 
@@ -86,7 +86,8 @@ UI notes:
 
 - Script list: **include tree** from the active script (RFC 6609); unused scripts below
 - CodeMirror 6 + `@codemirror/legacy-modes` sieve mode; keywords from CAPABILITY `SIEVE`
-- Debounced `CHECKSCRIPT` if the server accepts it (this Cyrus greeting has no `CHECKSCRIPT` token)
+- Debounced server syntax check (~500ms): `CHECKSCRIPT` when advertised, otherwise PUTSCRIPT/DELETESCRIPT (RFC 5804 fallback). Errors show in the gutter.
+- Indent: tabs or spaces, width 2/4/8 (default **tab**, width **4**); `{` and `[` indent the same
 - Save limit **50K** (`sieve_maxscriptsize`)
 
 ## Out of scope

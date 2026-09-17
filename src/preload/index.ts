@@ -20,6 +20,10 @@ const api: SieveApi = {
     delete: (name: string) => ipcRenderer.invoke('sieve:delete', name),
     check: (body: string) => ipcRenderer.invoke('sieve:check', body),
     capabilities: () => ipcRenderer.invoke('sieve:capabilities')
+  },
+  prefs: {
+    get: () => ipcRenderer.invoke('prefs:get'),
+    save: (prefs) => ipcRenderer.invoke('prefs:save', prefs)
   }
 }
 

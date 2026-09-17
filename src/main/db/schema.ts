@@ -18,5 +18,7 @@ export const settings = sqliteTable('settings', {
   windowX: integer('window_x'),
   windowY: integer('window_y'),
   windowWidth: integer('window_width'),
-  windowHeight: integer('window_height')
+  windowHeight: integer('window_height'),
+  indentWithTabs: integer('indent_with_tabs', { mode: 'boolean' }).notNull().default(true),
+  tabSize: integer('tab_size').notNull().default(4)
 })

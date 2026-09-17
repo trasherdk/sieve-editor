@@ -1,6 +1,13 @@
+export const DEFAULT_TAB_SIZE = 4
+export const DEFAULT_INDENT_WITH_TABS = true
+export const MAX_SCRIPT_BYTES = 50 * 1024
 export const DEFAULT_HOST = 'mail.fumlersoft.dk'
 export const DEFAULT_PORT = 4190
-export const MAX_SCRIPT_BYTES = 50 * 1024
+
+export type EditorPrefs = {
+  indentWithTabs: boolean
+  tabSize: number
+}
 
 export type TlsMode = 'starttls' | 'optional' | 'plaintext'
 
@@ -80,5 +87,9 @@ export type SieveApi = {
     delete: (name: string) => Promise<void>
     check: (body: string) => Promise<CheckDiagnostic[]>
     capabilities: () => Promise<Capabilities | null>
+  }
+  prefs: {
+    get: () => Promise<EditorPrefs>
+    save: (prefs: EditorPrefs) => Promise<EditorPrefs>
   }
 }

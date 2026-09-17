@@ -2,16 +2,18 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { join } from 'node:path'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { MAX_SCRIPT_BYTES } from '../shared/types'
-import type { AccountInput, Capabilities, ScriptBodies, SieveScript } from '../shared/types'
+import type { AccountInput, Capabilities, EditorPrefs, ScriptBodies, SieveScript } from '../shared/types'
 import {
   closeDb,
   decryptPassword,
   getAccount,
+  getEditorPrefs,
   getWindowBounds,
   listAccounts,
   openDb,
   removeAccount,
   saveAccount,
+  saveEditorPrefs,
   saveWindowBounds,
   setLastScript
 } from './db'
@@ -185,19 +187,13 @@ function registerIpc(): void {
 
   ipcMain.handle('sieve:delete', (_e, name: string) => wrapIpc(() => requireClient().deleteScript(name)))
 
-  ipcMain.handle('sieve:check', (_e, body: string) =>
-    wrapIpc(async () => {
-      try {
-        return await requireClient().checkScript(body)
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err)
-        if (/unknown command|unrecognized/i.test(message)) return []
-        throw err
-      }
-    })
-  )
+  ipcMain.handle('sieve:check', (_e, body: string) => wrapIpc(() => requireClient().checkScript(body)))
 
   ipcMain.handle('sieve:capabilities', () => lastCapabilities)
+
+  ipcMain.handle('prefs:get', () => wrapIpc(() => getEditorPrefs()))
+
+  ipcMain.handle('prefs:save', (_e, prefs: EditorPrefs) => wrapIpc(() => saveEditorPrefs(prefs)))
 }
 
 app.whenReady().then(() => {

@@ -33,3 +33,9 @@ body {
 .cm-editor .cm-scroller {
   font-family: var(--font-mono);
 }
+
+.cm-editor .cm-cursor,
+.cm-editor .cm-cursor-primary {
+  border-left-width: 1.2px !important;
+  border-left-style: solid !important;
+}

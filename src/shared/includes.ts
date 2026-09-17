@@ -1,4 +1,4 @@
-import type { SieveScript } from './types'
+import type { CheckDiagnostic, SieveScript } from './types'
 
 export type IncludeLocation = 'personal' | 'global'
 
@@ -135,6 +135,98 @@ function parseIncludeArgs(src: string, i: number): { ref: IncludeRef; i: number 
   const q = skipQuoted(src, i)
   if (!q.value) return null
   return { ref: { name: q.value, location, optional, once }, i: q.i }
+}
+
+function lineOf(source: string, index: number): number {
+  let n = 1
+  for (let k = 0; k < index && k < source.length; k++) if (source[k] === '\n') n++
+  return n
+}
+
+/** Unclosed strings and unmatched [] () {} outside comments/strings. */
+export function findSyntaxIssues(source: string): CheckDiagnostic[] {
+  const issues: CheckDiagnostic[] = []
+  const stack: Array<{ ch: string; i: number }> = []
+  const closeOf: Record<string, string> = { '[': ']', '(': ')', '{': '}' }
+  const openOf: Record<string, string> = { ']': '[', ')': '(', '}': '{' }
+  let i = 0
+  while (i < source.length) {
+    const c = source[i]
+    if (c === '#') {
+      i = skipHashComment(source, i)
+      continue
+    }
+    if (c === '/' && source[i + 1] === '*') {
+      i = skipBlockComment(source, i)
+      continue
+    }
+    if (c === '"') {
+      const start = i
+      let j = i + 1
+      let closed = false
+      while (j < source.length) {
+        if (source[j] === '\\' && j + 1 < source.length) {
+          j += 2
+          continue
+        }
+        if (source[j] === '"') {
+          closed = true
+          j++
+          break
+        }
+        j++
+      }
+      if (!closed) {
+        issues.push({ line: lineOf(source, start), message: 'Unclosed string', severity: 'error' })
+        return issues
+      }
+      i = j
+      continue
+    }
+    if (c === '{') {
+      if (/^\{\d+\+?\}/.test(source.slice(i))) {
+        i = skipLiteral(source, i)
+        continue
+      }
+      stack.push({ ch: '{', i })
+      i++
+      continue
+    }
+    if (c === '[' || c === '(') {
+      stack.push({ ch: c, i })
+      i++
+      continue
+    }
+    if (c === ']' || c === ')' || c === '}') {
+      const top = stack.pop()
+      if (!top || top.ch !== openOf[c]) {
+        issues.push({ line: lineOf(source, i), message: `Unmatched ${c}`, severity: 'error' })
+      }
+      i++
+      continue
+    }
+    if (IDENT_START.test(c)) {
+      const w = readIdent(source, i)
+      if (w.ident.toLowerCase() === 'text') {
+        const j = skipWsAndComments(source, w.i)
+        if (source[j] === ':') {
+          i = skipMultiline(source, j + 1)
+          continue
+        }
+      }
+      i = w.i
+      continue
+    }
+    i++
+  }
+  for (const open of stack) {
+    issues.push({
+      line: lineOf(source, open.i),
+      message: `Missing closing ${closeOf[open.ch]}`,
+      severity: 'error'
+    })
+  }
+  return issues
 }
 
 /** Collect RFC 6609 include actions; skip comments, strings, and text: bodies. */

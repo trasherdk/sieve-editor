@@ -92,11 +92,11 @@ export function capabilitiesFromLines(lines: string[]): Capabilities {
 
 export function parseCheckDiagnostics(message: string): CheckDiagnostic[] {
   const trimmed = message.replace(/^NO\s+/i, '').replace(/^"|"$/g, '').trim()
+  if (!trimmed) return []
   const lineMatch = trimmed.match(/line\s+(\d+)\s*:?\s*(.*)/i)
   if (lineMatch) {
     return [{ line: Number(lineMatch[1]), message: lineMatch[2] || trimmed, severity: 'error' }]
   }
-  if (!trimmed) return []
   return [{ line: null, message: trimmed, severity: 'error' }]
 }
 
@@ -105,6 +105,8 @@ export class ManageSieveClient {
   private buffer = Buffer.alloc(0)
   private waiters: Array<(chunk: Buffer) => void> = []
   private queue: Promise<unknown> = Promise.resolve()
+  private knownNames = new Set<string>()
+  private checkscriptFailed = false
   capabilities: Capabilities = {
     implementation: null,
     sasl: [],
@@ -128,6 +130,8 @@ export class ManageSieveClient {
 
   private async connectInner(opts: ConnectOptions): Promise<Capabilities> {
     await this.closeSocket()
+    this.knownNames.clear()
+    this.checkscriptFailed = false
     const timeoutMs = opts.timeoutMs ?? 15000
     const socket = net.connect({ host: opts.host, port: opts.port })
     this.socket = socket
@@ -197,10 +201,12 @@ export class ManageSieveClient {
       this.writeLine('LISTSCRIPTS')
       const res = await this.readResponse()
       if (res.status !== 'OK') throw new ManageSieveError(res.message, res.status)
-      return res.lines.map((line) => {
+      const scripts = res.lines.map((line) => {
         const names = parseQuoted(line)
         return { name: names[0] ?? line, active: /(?:^|\s)ACTIVE(?:\s|$)/i.test(line) }
       })
+      this.knownNames = new Set(scripts.map((s) => s.name))
+      return scripts
     })
   }
 
@@ -218,6 +224,7 @@ export class ManageSieveClient {
       await this.sendLiteralCommand(`PUTSCRIPT ${quote(name)}`, body)
       const res = await this.readResponse()
       if (res.status !== 'OK') throw new ManageSieveError(res.message, res.status)
+      this.knownNames.add(name)
     })
   }
 
@@ -234,16 +241,53 @@ export class ManageSieveClient {
       this.writeLine(`DELETESCRIPT ${quote(name)}`)
       const res = await this.readResponse()
       if (res.status !== 'OK') throw new ManageSieveError(res.message, res.status)
+      this.knownNames.delete(name)
     })
   }
 
   checkScript(body: string): Promise<CheckDiagnostic[]> {
     return this.enqueue(async () => {
-      await this.sendLiteralCommand('CHECKSCRIPT', body)
-      const res = await this.readResponse()
-      if (res.status === 'OK') return []
-      return parseCheckDiagnostics(res.message || res.lines.join('\n'))
+      if (!body.trim()) return []
+      if (this.capabilities.checkscript && !this.checkscriptFailed) {
+        const viaCommand = await this.checkScriptCommand(body)
+        if (viaCommand !== null) return viaCommand
+      }
+      return this.checkViaPut(body)
     })
+  }
+
+  private async checkScriptCommand(body: string): Promise<CheckDiagnostic[] | null> {
+    await this.sendLiteralCommand('CHECKSCRIPT', body)
+    const res = await this.readResponse()
+    if (res.status === 'OK') return []
+    if (/unknown command|unrecognized command|bad command/i.test(res.message)) {
+      this.checkscriptFailed = true
+      this.capabilities.checkscript = false
+      return null
+    }
+    return parseCheckDiagnostics(res.message || res.lines.join('\n'))
+  }
+
+  private checkTempName(): string {
+    const base = 'SieveEditor.check.tmp'
+    if (!this.knownNames.has(base)) return base
+    let i = 1
+    while (this.knownNames.has(`${base}.${i}`)) i++
+    return `${base}.${i}`
+  }
+
+  /** RFC 5804: servers without CHECKSCRIPT validate via PUTSCRIPT, which does not store on syntax error. */
+  private async checkViaPut(body: string): Promise<CheckDiagnostic[]> {
+    const name = this.checkTempName()
+    await this.sendLiteralCommand(`PUTSCRIPT ${quote(name)}`, body)
+    const res = await this.readResponse()
+    if (res.status !== 'OK') {
+      return parseCheckDiagnostics(res.message || res.lines.join('\n'))
+    }
+    this.writeLine(`DELETESCRIPT ${quote(name)}`)
+    const del = await this.readResponse()
+    if (del.status === 'OK') this.knownNames.delete(name)
+    return []
   }
 
   logout(): Promise<void> {

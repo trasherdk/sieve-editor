@@ -5,7 +5,8 @@
     keymap,
     lineNumbers,
     highlightActiveLine,
-    highlightActiveLineGutter
+    highlightActiveLineGutter,
+    drawSelection
   } from '@codemirror/view'
   import { Compartment, EditorState } from '@codemirror/state'
   import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
@@ -14,25 +15,30 @@
     bracketMatching,
     foldGutter,
     indentOnInput,
+    indentUnit,
     syntaxHighlighting,
     defaultHighlightStyle
   } from '@codemirror/language'
-  import { sieve } from '@codemirror/legacy-modes/mode/sieve'
   import { autocompletion, closeBrackets, completeFromList } from '@codemirror/autocomplete'
   import { searchKeymap, highlightSelectionMatches } from '@codemirror/search'
-  import { linter, lintGutter, type Diagnostic } from '@codemirror/lint'
+  import { linter, lintGutter, forceLinting, type Diagnostic } from '@codemirror/lint'
   import { oneDark } from '@codemirror/theme-one-dark'
   import type { CheckDiagnostic } from '@shared/types'
+  import { sieveMode } from './sieveMode'
 
   let {
     value = '',
     keywords = [],
     diagnostics = [],
+    indentWithTabs = true,
+    tabSize = 4,
     onchange
   }: {
     value?: string
     keywords?: string[]
     diagnostics?: CheckDiagnostic[]
+    indentWithTabs?: boolean
+    tabSize?: number
     onchange: (next: string) => void
   } = $props()
 
@@ -41,6 +47,13 @@
   let applying = false
   const lintConf = new Compartment()
   const autoConf = new Compartment()
+  const indentConf = new Compartment()
+
+  function indentExt(useTabs: boolean, size: number) {
+    const width = Math.min(8, Math.max(1, size))
+    const unit = useTabs ? '\t' : ' '.repeat(width)
+    return [indentUnit.of(unit), EditorState.tabSize.of(width)]
+  }
 
   function toCmDiagnostics(doc: string, items: CheckDiagnostic[]): Diagnostic[] {
     const lines = doc.split('\n')
@@ -60,7 +73,7 @@
 
   function lintExt(items: CheckDiagnostic[]) {
     const snapshot = items
-    return linter((v) => toCmDiagnostics(v.state.doc.toString(), snapshot))
+    return linter((v) => toCmDiagnostics(v.state.doc.toString(), snapshot), { delay: 0 })
   }
 
   function autoExt(words: string[]) {
@@ -82,15 +95,17 @@
           highlightActiveLineGutter(),
           foldGutter(),
           history(),
+          drawSelection({ cursorBlinkRate: 1200 }),
           indentOnInput(),
           bracketMatching(),
           closeBrackets(),
           highlightSelectionMatches(),
           syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
-          StreamLanguage.define(sieve),
+          StreamLanguage.define(sieveMode),
           autoConf.of(autoExt(keywords)),
           lintGutter(),
           lintConf.of(lintExt(diagnostics)),
+          indentConf.of(indentExt(indentWithTabs, tabSize)),
           oneDark,
           keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
           EditorView.updateListener.of((update) => {
@@ -106,8 +121,13 @@
   $effect(() => {
     if (!view) return
     view.dispatch({
-      effects: [lintConf.reconfigure(lintExt(diagnostics)), autoConf.reconfigure(autoExt(keywords))]
+      effects: [
+        lintConf.reconfigure(lintExt(diagnostics)),
+        autoConf.reconfigure(autoExt(keywords)),
+        indentConf.reconfigure(indentExt(indentWithTabs, tabSize))
+      ]
     })
+    forceLinting(view)
   })
 
   $effect(() => {
