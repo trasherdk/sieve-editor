@@ -1,6 +1,6 @@
 # Sieve
 
-Desktop editor for **Cyrus Sieve** scripts on `mail.fumlersoft.dk`. The point is to list, edit, save, activate, and delete scripts against live ManageSieve — with syntax highlighting — without standing up a web server or copying the old AGPL app.
+Desktop editor for **Cyrus Sieve** scripts on a ManageSieve-compatible server. The point is to list, edit, save, activate, and delete scripts against live ManageSieve — with syntax highlighting — without standing up a web server or copying the old AGPL app.
 
 - Protocol: [RFC 5804](https://datatracker.ietf.org/doc/html/rfc5804) (ManageSieve)
 - Language: [RFC 5228](https://datatracker.ietf.org/doc/html/rfc5228) (Sieve)
@@ -32,7 +32,7 @@ Cyrus allows **one active script**. Syntax errors come back as `NO "line N: …"
 
 ## Cyrus / network
 
-Live endpoint: **`mail.fumlersoft.dk:4190`** (editable in the login form). That is `timsieved` (Cyrus 3.8).
+Host and port are editable in the login form (default port **4190**). Against Cyrus, that is `timsieved`.
 
 On this mail host, `/etc/services` maps **`sieve` → 4190/tcp**, not 2000. `timsieved` listens on `0.0.0.0:4190`. Firewall `--dport sieve` therefore opens 4190. Two `cyrus.conf` lines (`listen="sieve"` and `listen="4190"`) are the **same port**. Default `nmap` without `-p` misses 4190 (not in the top 1000).
 
