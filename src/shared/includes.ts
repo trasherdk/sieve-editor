@@ -143,13 +143,216 @@ function lineOf(source: string, index: number): number {
   return n
 }
 
-/** Unclosed strings and unmatched [] () {} outside comments/strings. */
+type TokKind = 'string' | 'number' | 'ident' | 'tag' | '[' | ']' | '(' | ')' | '{' | '}' | ',' | ';' | 'junk' | 'eof'
+
+type Tok = { kind: TokKind; i: number; end: number; text: string }
+
+const PUNCT = new Map<string, Exclude<TokKind, 'string' | 'number' | 'ident' | 'tag' | 'eof'>>([
+  ['[', '['],
+  [']', ']'],
+  ['(', '('],
+  [')', ')'],
+  ['{', '{'],
+  ['}', '}'],
+  [',', ','],
+  [';', ';']
+])
+
+function nextTok(source: string, from: number): Tok {
+  const i = skipWsAndComments(source, from)
+  if (i >= source.length) return { kind: 'eof', i, end: i, text: '' }
+  const c = source[i]
+  if (c === '"') {
+    const q = skipQuoted(source, i)
+    return { kind: 'string', i, end: q.i, text: q.value }
+  }
+  if (c === '{') {
+    if (/^\{\d+\+?\}/.test(source.slice(i))) {
+      return { kind: 'string', i, end: skipLiteral(source, i), text: '' }
+    }
+    return { kind: '{', i, end: i + 1, text: '{' }
+  }
+  const punct = PUNCT.get(c)
+  if (punct) return { kind: punct, i, end: i + 1, text: c }
+  if (c === ':' && i + 1 < source.length && IDENT_START.test(source[i + 1])) {
+    const w = readIdent(source, i + 1)
+    return { kind: 'tag', i, end: w.i, text: w.ident }
+  }
+  if (/\d/.test(c)) {
+    let j = i + 1
+    while (j < source.length && /\d/.test(source[j])) j++
+    if (j < source.length && /[kKmMgG]/.test(source[j])) j++
+    return { kind: 'number', i, end: j, text: source.slice(i, j) }
+  }
+  if (IDENT_START.test(c)) {
+    const w = readIdent(source, i)
+    if (w.ident.toLowerCase() === 'text') {
+      const j = skipWsAndComments(source, w.i)
+      if (source[j] === ':') {
+        return { kind: 'string', i, end: skipMultiline(source, j + 1), text: 'text:' }
+      }
+    }
+    return { kind: 'ident', i, end: w.i, text: w.ident }
+  }
+  return { kind: 'junk', i, end: i + 1, text: c }
+}
+
+function scanCommaSemicolon(source: string): CheckDiagnostic[] {
+  const issues: CheckDiagnostic[] = []
+  let i = 0
+  let prevEnd = 0
+
+  const peek = (): Tok => nextTok(source, i)
+  const bump = (): Tok => {
+    const t = peek()
+    i = t.end
+    if (t.kind !== 'eof') prevEnd = t.end
+    return t
+  }
+  const err = (at: number, message: string): void => {
+    issues.push({ line: lineOf(source, at), message, severity: 'error' })
+  }
+
+  function parseStringList(): boolean {
+    if (bump().kind !== '[') return false
+    if (peek().kind === ']') {
+      bump()
+      return true
+    }
+    if (peek().kind !== 'string') return peek().kind !== 'eof'
+    bump()
+    while (peek().kind !== ']' && peek().kind !== 'eof') {
+      if (peek().kind === ',') {
+        bump()
+        if (peek().kind === 'string') bump()
+        else if (peek().kind !== ']' && peek().kind !== 'eof') bump()
+        continue
+      }
+      if (peek().kind === 'string') {
+        err(peek().i, 'Missing comma')
+        bump()
+        continue
+      }
+      break
+    }
+    if (peek().kind === ']') {
+      bump()
+      return true
+    }
+    return peek().kind !== 'eof'
+  }
+
+  function parseArguments(): boolean {
+    for (;;) {
+      const t = peek()
+      if (t.kind === 'string' || t.kind === 'number' || t.kind === 'tag') {
+        bump()
+        continue
+      }
+      if (t.kind === '[') {
+        if (!parseStringList()) return false
+        continue
+      }
+      return true
+    }
+  }
+
+  function parseTest(): boolean {
+    while (peek().kind === 'ident' && peek().text.toLowerCase() === 'not') bump()
+    if (peek().kind !== 'ident') return peek().kind !== 'eof'
+    bump()
+    if (!parseArguments()) return false
+    if (peek().kind === '(') return parseTestList()
+    return true
+  }
+
+  function parseTestList(): boolean {
+    if (bump().kind !== '(') return false
+    if (peek().kind === ')') {
+      bump()
+      return true
+    }
+    if (!parseTest()) return false
+    while (peek().kind !== ')' && peek().kind !== 'eof') {
+      if (peek().kind === ',') {
+        bump()
+        if (!parseTest()) return false
+        continue
+      }
+      if (peek().kind === 'ident') {
+        err(peek().i, 'Missing comma')
+        if (!parseTest()) return false
+        continue
+      }
+      break
+    }
+    if (peek().kind === ')') {
+      bump()
+      return true
+    }
+    return peek().kind !== 'eof'
+  }
+
+  function parseBlock(): boolean {
+    if (peek().kind !== '{') return peek().kind !== 'eof'
+    bump()
+    if (!parseCommands(true)) return false
+    if (peek().kind === '}') {
+      bump()
+      return true
+    }
+    return peek().kind !== 'eof'
+  }
+
+  function parseCommand(): boolean {
+    const start = i
+    const nameTok = peek()
+    if (nameTok.kind !== 'ident') {
+      if (nameTok.kind === 'eof' || nameTok.kind === '}') return true
+      bump()
+      return true
+    }
+    const name = bump().text.toLowerCase()
+    if (name === 'if' || name === 'elsif') {
+      if (!parseTest()) return false
+      return parseBlock()
+    }
+    if (name === 'else') return parseBlock()
+    if (!parseArguments()) return false
+    if (peek().kind === '(' && !parseTestList()) return false
+    if (peek().kind === '{') return parseBlock()
+    if (peek().kind === ';') {
+      bump()
+      return true
+    }
+    if (peek().kind === 'eof' && i === start) return true
+    err(prevEnd, 'Missing semicolon')
+    return true
+  }
+
+  function parseCommands(inBlock: boolean): boolean {
+    for (;;) {
+      const t = peek()
+      if (t.kind === 'eof') return true
+      if (inBlock && t.kind === '}') return true
+      const at = i
+      if (!parseCommand()) return false
+      if (i === at) bump()
+    }
+  }
+
+  parseCommands(false)
+  return issues
+}
+
+/** Unclosed strings, unmatched [] () {}, missing commas in lists, missing semicolons. */
 export function findSyntaxIssues(source: string): CheckDiagnostic[] {
   const issues: CheckDiagnostic[] = []
   const stack: Array<{ ch: string; i: number }> = []
   const closeOf: Record<string, string> = { '[': ']', '(': ')', '{': '}' }
   const openOf: Record<string, string> = { ']': '[', ')': '(', '}': '{' }
   let i = 0
+  let unclosedString = false
   while (i < source.length) {
     const c = source[i]
     if (c === '#') {
@@ -178,7 +381,8 @@ export function findSyntaxIssues(source: string): CheckDiagnostic[] {
       }
       if (!closed) {
         issues.push({ line: lineOf(source, start), message: 'Unclosed string', severity: 'error' })
-        return issues
+        unclosedString = true
+        break
       }
       i = j
       continue
@@ -226,6 +430,7 @@ export function findSyntaxIssues(source: string): CheckDiagnostic[] {
       severity: 'error'
     })
   }
+  if (!unclosedString) issues.push(...scanCommaSemicolon(source))
   return issues
 }
 

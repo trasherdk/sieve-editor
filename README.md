@@ -86,7 +86,7 @@ UI notes:
 
 - Script list: **include tree** from the active script (RFC 6609); unused scripts below
 - CodeMirror 6 + `@codemirror/legacy-modes` sieve mode; keywords from CAPABILITY `SIEVE`
-- Debounced server syntax check (~500ms): `CHECKSCRIPT` when advertised, otherwise PUTSCRIPT/DELETESCRIPT (RFC 5804 fallback). Errors show in the gutter.
+- Debounced server syntax check (~500ms): `CHECKSCRIPT` when advertised, otherwise PUTSCRIPT/DELETESCRIPT (RFC 5804 fallback). Local checks: unclosed strings, unmatched `[]` `()` `{}`, missing `,` in lists, missing `;` after commands.
 - Indent: tabs or spaces, width 2/4/8 (default **tab**, width **4**); `{` and `[` indent the same
 - Save limit **50K** (`sieve_maxscriptsize`)
 
