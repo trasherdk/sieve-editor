@@ -69,7 +69,7 @@ Scripts stay on Cyrus. SQLite is not a backup of script bodies.
 Electron 43+ does **not** download its binary in npm `postinstall`. This repo’s `postinstall` runs `node ./node_modules/electron/install.js` then rebuilds native modules. If you see `Error: Electron uninstall`, the zip was not extracted — run that install script again.
 
 ```bash
-cd sieve-new
+cd sieve-editor
 pnpm.cmd install
 pnpm.cmd dev
 ```
