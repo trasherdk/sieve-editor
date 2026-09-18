@@ -3,20 +3,28 @@
   import type { AccountInput, AccountRecord, TlsMode } from '@shared/types'
   import { DEFAULT_HOST, DEFAULT_PORT } from '@shared/types'
 
+  import icon from './assets/icon.png'
+
   let {
     accounts,
     busy,
     error,
     preferredId = null,
+    appName,
+    appVersion,
     onconnect,
-    onremove
+    onremove,
+    oncheckupdates
   }: {
     accounts: AccountRecord[]
     busy: boolean
     error: string
     preferredId?: number | null
+    appName: string
+    appVersion: string
     onconnect: (input: AccountInput) => void
     onremove: (id: number) => void
+    oncheckupdates: () => void
   } = $props()
 
   let host = $state(DEFAULT_HOST)
@@ -101,8 +109,23 @@
     class="w-full max-w-lg rounded-xl border border-line bg-panel p-6 shadow-xl"
     onsubmit={submit}
   >
-    <h1 class="mb-1 text-xl font-semibold">Sieve</h1>
-    <p class="mb-5 text-sm text-zinc-400">Connect to a ManageSieve server</p>
+    <div class="mb-5 flex items-center gap-3">
+      <img src={icon} alt="" class="size-12 shrink-0 rounded-2xl" />
+      <div class="min-w-0">
+        <h1 class="flex flex-wrap items-baseline gap-x-2 text-xl font-semibold">
+          <span>{appName}</span>
+          <button
+            type="button"
+            class="text-sm font-normal text-zinc-400 hover:text-zinc-200"
+            title="Check for updates"
+            onclick={oncheckupdates}
+          >
+            {appVersion}
+          </button>
+        </h1>
+        <p class="text-sm text-zinc-400">Connect to a ManageSieve server</p>
+      </div>
+    </div>
 
     <div class="mb-4 flex items-center justify-between">
       <p class="text-xs uppercase tracking-wide text-zinc-400">Accounts</p>

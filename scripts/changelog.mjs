@@ -28,7 +28,7 @@ export function buildReleaseNotes(tag = '', toRef = 'HEAD') {
     .filter((s) => !/^chore: release v\d/i.test(s))
     .map((s) => `- ${s}`)
   const changes = items.length ? items.join('\n') : '- See the repository history for this release.'
-  const title = tag ? `Sieve ${tag}` : 'Changes'
+  const title = tag ? `Sieve Editor ${tag}` : 'Changes'
   const compare = prev && tag ? `\n\nCompare: ${prev}...${tag}` : ''
   return `## ${title}\n\n${changes}${compare}\n`
 }

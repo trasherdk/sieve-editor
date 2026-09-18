@@ -15,6 +15,11 @@
     SieveScript
   } from '@shared/types'
   import { DEFAULT_INDENT_WITH_TABS, DEFAULT_TAB_SIZE } from '@shared/types'
+  import { APP_NAME } from '@shared/app'
+  import icon from './assets/icon.png'
+
+  let appName = $state(APP_NAME)
+  let appVersion = $state('')
 
   let accounts = $state<AccountRecord[]>([])
   let busy = $state(false)
@@ -46,6 +51,10 @@
   const treeRows = $derived(graph.root ? flattenTree(graph.root) : [])
 
   async function loadAccounts(): Promise<void> {
+    const info = await window.api.app.info()
+    appName = info.name
+    appVersion = info.version
+    document.title = `${info.name} ${info.version}`
     accounts = await window.api.accounts.list()
     const prefs = await window.api.prefs.get()
     indentWithTabs = prefs.indentWithTabs
@@ -321,22 +330,37 @@
     {accounts}
     {busy}
     {error}
+    {appName}
+    {appVersion}
     preferredId={lastInput?.id ?? null}
     onconnect={connect}
     onremove={removeSavedAccount}
+    oncheckupdates={() => void window.api.app.checkForUpdates()}
   />
 {:else}
   <div class="flex h-full min-h-0 flex-col">
     <header class="flex items-center gap-3 border-b border-line bg-panel px-3 py-2">
+      <img src={icon} alt="" class="size-8 shrink-0 rounded-lg" />
       <div class="min-w-0 flex-1 text-sm">
-        <div class="truncate font-medium">
-          {account?.username}@{account?.host}:{account?.port}
+        <div class="flex min-w-0 items-baseline gap-2 font-medium">
+          <span class="truncate">{appName}</span>
+          {#if appVersion}
+            <button
+              type="button"
+              class="shrink-0 font-normal text-zinc-400 hover:text-zinc-200"
+              title="Check for updates"
+              onclick={() => void window.api.app.checkForUpdates()}
+            >
+              {appVersion}
+            </button>
+          {/if}
         </div>
         <div class="truncate text-xs text-zinc-400">
+          {account?.username}@{account?.host}:{account?.port}
           {#if connected}
-            {capabilities?.implementation ?? 'ManageSieve'}
+            <span> · {capabilities?.implementation ?? 'ManageSieve'}</span>
           {:else}
-            <span class="text-warn">Disconnected</span>
+            <span class="text-warn"> · Disconnected</span>
           {/if}
           {#if dirty}<span class="text-warn"> • unsaved</span>{/if}
         </div>

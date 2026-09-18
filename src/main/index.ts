@@ -1,6 +1,8 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
+import { APP_NAME } from '../shared/app'
 import { MAX_SCRIPT_BYTES } from '../shared/types'
 import type { AccountInput, Capabilities, EditorPrefs, ScriptBodies, SieveScript } from '../shared/types'
 import {
@@ -18,7 +20,16 @@ import {
   setLastScript
 } from './db'
 import { ManageSieveClient } from './managesieve'
-import { startAutoUpdate } from './updater'
+import { checkForUpdates, startAutoUpdate } from './updater'
+
+function appTitle(): string {
+  return `${APP_NAME} ${app.getVersion()}`
+}
+
+function appIcon(): string | undefined {
+  const icon = join(__dirname, '../../build/icon.png')
+  return existsSync(icon) ? icon : undefined
+}
 
 const IDLE_MS = 15 * 60 * 1000
 
@@ -111,7 +122,8 @@ function createWindow(): void {
     minHeight: 560,
     show: false,
     autoHideMenuBar: true,
-    title: 'Sieve',
+    title: appTitle(),
+    icon: appIcon(),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -151,6 +163,10 @@ function wrapIpc<T>(fn: () => Promise<T> | T): Promise<T> {
 
 function registerIpc(): void {
   ipcMain.handle('ping', () => 'pong')
+
+  ipcMain.handle('app:info', () => ({ name: APP_NAME, version: app.getVersion() }))
+
+  ipcMain.handle('app:checkForUpdates', () => wrapIpc(() => checkForUpdates(true)))
 
   ipcMain.handle('accounts:list', () => wrapIpc(() => listAccounts()))
 
@@ -228,6 +244,7 @@ function registerIpc(): void {
 }
 
 app.whenReady().then(() => {
+  app.setName(APP_NAME)
   electronApp.setAppUserModelId('dk.fumlersoft.sieve-editor')
   app.on('browser-window-created', (_, window) => optimizer.watchWindowShortcuts(window))
   registerIpc()

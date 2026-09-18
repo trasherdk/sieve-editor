@@ -1,6 +1,5 @@
 import { execFileSync, execSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildReleaseNotes } from './changelog.mjs'
@@ -173,16 +172,7 @@ if (tip !== finalMain || tip !== finalDevelop) {
 gitRun(['tag', '-a', tag, tip, '-m', tag])
 gitRun(['push', 'origin', tag])
 
-const notesFile = join(tmpdir(), `sieve-${tag}-notes.md`)
-writeFileSync(notesFile, changes)
-try {
-  gh(['release', 'view', tag])
-  gh(['release', 'edit', tag, '--title', `Sieve ${tag}`, '--notes-file', notesFile])
-} catch {
-  gh(['release', 'create', tag, '--title', `Sieve ${tag}`, '--notes-file', notesFile])
-}
-
 console.log(`Tagged ${tag} at ${tip}`)
 console.log(`origin/main and origin/develop are ${tip}`)
 console.log(`Release: https://github.com/trasherdk/sieve-editor/releases/tag/${tag}`)
-console.log('Binaries will appear on that release when the Release workflow finishes.')
+console.log('GitHub Actions publishes the GitHub Release (notes + binaries). Do not create the release locally — a published empty release blocks binary upload.')

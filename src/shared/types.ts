@@ -68,8 +68,17 @@ export type ConnectResult = {
   bodies: ScriptBodies
 }
 
+export type AppInfo = {
+  name: string
+  version: string
+}
+
 export type SieveApi = {
   ping: () => Promise<string>
+  app: {
+    info: () => Promise<AppInfo>
+    checkForUpdates: () => Promise<void>
+  }
   accounts: {
     list: () => Promise<AccountRecord[]>
     save: (input: AccountInput) => Promise<AccountRecord>
