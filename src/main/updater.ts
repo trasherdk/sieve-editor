@@ -2,9 +2,9 @@ import { app, dialog, shell, type BrowserWindow } from 'electron'
 import { is } from '@electron-toolkit/utils'
 import electronUpdater from 'electron-updater'
 import { spawn } from 'node:child_process'
-import { createWriteStream, readdirSync, writeFileSync } from 'node:fs'
+import { createWriteStream, existsSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { APP_NAME, GITHUB_OWNER, GITHUB_REPO } from '../shared/app'
 
 const FEED = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`
@@ -209,70 +209,115 @@ async function downloadFile(url: string, dest: string, size?: number): Promise<v
   }
 }
 
+const PORTABLE_PENDING = '.sieve-editor-update.exe'
+
 function portableAssetFileName(assetName: string): string {
   const base = basename(assetName.replaceAll('\\', '/'))
   if (!/^[A-Za-z0-9._-]+\.exe$/i.test(base)) return ''
   return base
 }
 
-function quitAndReplacePortable(downloaded: string, oldExe: string, nextExe: string): void {
-  const vbs = join(tmpdir(), 'sieve-editor-update.vbs')
+function launchPortableExe(exe: string): void {
+  spawn(exe, [], { detached: true, stdio: 'ignore', cwd: dirname(exe) }).unref()
+}
+
+function orphanWscript(vbs: string, args: string[]): void {
   const wscript = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'wscript.exe')
-  const same = oldExe.toLowerCase() === nextExe.toLowerCase()
-  const script = [
-    'Set wmi = GetObject("winmgmts:\\\\.\\root\\cimv2")',
-    'pid = WScript.Arguments(0)',
-    'downloaded = WScript.Arguments(1)',
-    'oldExe = WScript.Arguments(2)',
-    'nextExe = WScript.Arguments(3)',
-    'overwrite = WScript.Arguments(4)',
-    'Do',
-    '  Set procs = wmi.ExecQuery("SELECT ProcessId FROM Win32_Process WHERE ProcessId=" & pid)',
-    '  If procs.Count = 0 Then Exit Do',
-    '  WScript.Sleep 200',
-    'Loop',
-    'WScript.Sleep 400',
-    'Set fso = CreateObject("Scripting.FileSystemObject")',
-    'Set sh = CreateObject("WScript.Shell")',
-    'done = False',
-    'For i = 1 To 25',
-    '  On Error Resume Next',
-    '  Err.Clear',
-    '  If overwrite = "1" Then',
-    '    fso.CopyFile downloaded, nextExe, True',
-    '    If Err.Number = 0 Then',
-    '      If fso.FileExists(downloaded) Then fso.DeleteFile downloaded, True',
-    '      done = True',
-    '      Exit For',
-    '    End If',
-    '  Else',
-    '    If fso.FileExists(nextExe) Then fso.DeleteFile nextExe, True',
-    '    Err.Clear',
-    '    fso.MoveFile downloaded, nextExe',
-    '    If Err.Number = 0 Then',
-    '      If fso.FileExists(oldExe) Then fso.DeleteFile oldExe, True',
-    '      done = True',
-    '      Exit For',
-    '    End If',
-    '  End If',
-    '  WScript.Sleep 200',
-    'Next',
-    'On Error Resume Next',
-    'If done Then sh.Run """" & nextExe & """", 1, False',
-    'fso.DeleteFile WScript.ScriptFullName, True',
-    ''
-  ].join('\r\n')
-  writeFileSync(vbs, script)
-  const quoted = [wscript, '//B', '//Nologo', vbs, String(process.pid), downloaded, oldExe, nextExe, same ? '1' : '0']
+  const quoted = [wscript, '//B', '//Nologo', vbs, ...args]
     .map((a) => `"${a.replaceAll('"', '')}"`)
     .join(' ')
-  spawn(process.env.ComSpec || 'cmd.exe', ['/d', '/c', `start "" /b ${quoted}`], {
+  spawn(process.env.ComSpec || 'cmd.exe', ['/d', '/c', `start "" ${quoted}`], {
     detached: true,
     stdio: 'ignore',
     windowsHide: true,
     windowsVerbatimArguments: true
   }).unref()
+}
+
+function writeDeleteAfterExitScript(): string {
+  const vbs = join(tmpdir(), 'sieve-editor-del.vbs')
+  writeFileSync(
+    vbs,
+    [
+      'Set wmi = GetObject("winmgmts:\\\\.\\root\\cimv2")',
+      'pid = WScript.Arguments(0)',
+      'target = WScript.Arguments(1)',
+      'Do',
+      '  Set procs = wmi.ExecQuery("SELECT ProcessId FROM Win32_Process WHERE ProcessId=" & pid)',
+      '  If procs.Count = 0 Then Exit Do',
+      '  WScript.Sleep 200',
+      'Loop',
+      'WScript.Sleep 300',
+      'Set fso = CreateObject("Scripting.FileSystemObject")',
+      'On Error Resume Next',
+      'For i = 1 To 20',
+      '  Err.Clear',
+      '  fso.DeleteFile target, True',
+      '  If Err.Number = 0 Then Exit For',
+      '  WScript.Sleep 200',
+      'Next',
+      'fso.DeleteFile WScript.ScriptFullName, True',
+      ''
+    ].join('\r\n')
+  )
+  return vbs
+}
+
+function quitAndReplacePortable(downloaded: string, oldExe: string, nextExe: string): void {
+  const same = oldExe.toLowerCase() === nextExe.toLowerCase()
+  if (!same) {
+    orphanWscript(writeDeleteAfterExitScript(), [String(process.pid), oldExe])
+    launchPortableExe(nextExe)
+    setTimeout(() => app.exit(0), 200)
+    return
+  }
+  const vbs = join(tmpdir(), 'sieve-editor-update.vbs')
+  writeFileSync(
+    vbs,
+    [
+      'Set wmi = GetObject("winmgmts:\\\\.\\root\\cimv2")',
+      'pid = WScript.Arguments(0)',
+      'downloaded = WScript.Arguments(1)',
+      'nextExe = WScript.Arguments(2)',
+      'Do',
+      '  Set procs = wmi.ExecQuery("SELECT ProcessId FROM Win32_Process WHERE ProcessId=" & pid)',
+      '  If procs.Count = 0 Then Exit Do',
+      '  WScript.Sleep 200',
+      'Loop',
+      'WScript.Sleep 400',
+      'Set fso = CreateObject("Scripting.FileSystemObject")',
+      'Set sh = CreateObject("WScript.Shell")',
+      'On Error Resume Next',
+      'done = False',
+      'For i = 1 To 25',
+      '  Err.Clear',
+      '  fso.CopyFile downloaded, nextExe, True',
+      '  If Err.Number = 0 Then',
+      '    If fso.FileExists(downloaded) Then fso.DeleteFile downloaded, True',
+      '    done = True',
+      '    Exit For',
+      '  End If',
+      '  WScript.Sleep 200',
+      'Next',
+      'If done Then sh.Run """" & nextExe & """", 1, False',
+      'fso.DeleteFile WScript.ScriptFullName, True',
+      ''
+    ].join('\r\n')
+  )
+  orphanWscript(vbs, [String(process.pid), downloaded, nextExe])
   setTimeout(() => app.exit(0), 200)
+}
+
+export function resumeIncompletePortableUpdate(): boolean {
+  const dir = process.env.PORTABLE_EXECUTABLE_DIR
+  if (!dir) return false
+  const pending = join(dir, PORTABLE_PENDING)
+  if (!existsSync(pending)) return false
+  const self = (process.env.PORTABLE_EXECUTABLE_FILE || portableExePath() || '').toLowerCase()
+  if (self === pending.toLowerCase()) return false
+  launchPortableExe(pending)
+  setTimeout(() => app.exit(0), 200)
+  return true
 }
 
 async function updatePortable(release: GithubRelease): Promise<void> {
@@ -290,8 +335,9 @@ async function updatePortable(release: GithubRelease): Promise<void> {
     return
   }
   if (!(await askToUpdate(version))) return
-  const dest = join(dir, '.sieve-editor-update.exe')
   const nextExe = join(dir, nextName)
+  const same = oldExe.toLowerCase() === nextExe.toLowerCase()
+  const dest = same ? join(dir, PORTABLE_PENDING) : nextExe
   try {
     await downloadFile(asset.browser_download_url, dest, asset.size)
     await askToRestart(() => quitAndReplacePortable(dest, oldExe, nextExe))
