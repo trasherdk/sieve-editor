@@ -85,6 +85,8 @@ The script fails unless the current branch is `develop` and it matches `origin/d
 
 Linux artifacts are built on Ubuntu runners; they are not tested on a local Linux desktop. macOS is not in this flow (no signing/notarization). `gh` must be logged in (`gh auth login -p ssh`).
 
+Packaged **NSIS** and **AppImage** builds check GitHub Releases on startup. If a newer version exists, the app asks whether to update; if you agree, it downloads and then asks to restart. **Portable** and **.deb** do not auto-update. Builds are unsigned, so Windows may still warn on SmartScreen.
+
 UI notes:
 
 - Script list: **include tree** from the active script (RFC 6609); unused scripts below

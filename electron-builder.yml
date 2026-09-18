@@ -19,6 +19,7 @@ asarUnpack:
   - '**/*.node'
 win:
   executableName: Sieve
+  verifyUpdateCodeSignature: false
   target:
     - nsis
     - portable
