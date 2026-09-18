@@ -23,8 +23,13 @@ import { ManageSieveClient } from './managesieve'
 import { checkForUpdates, startAutoUpdate } from './updater'
 import { exportScriptFile, importScriptFile } from './files'
 
+function isPortable(): boolean {
+  return Boolean(process.env.PORTABLE_EXECUTABLE_DIR)
+}
+
 function appTitle(): string {
-  return `${APP_NAME} ${app.getVersion()}`
+  const version = app.getVersion()
+  return isPortable() ? `${APP_NAME} ${version} Portable` : `${APP_NAME} ${version}`
 }
 
 function appIcon(): string | undefined {
@@ -165,7 +170,12 @@ function wrapIpc<T>(fn: () => Promise<T> | T): Promise<T> {
 function registerIpc(): void {
   ipcMain.handle('ping', () => 'pong')
 
-  ipcMain.handle('app:info', () => ({ name: APP_NAME, version: app.getVersion() }))
+  ipcMain.handle('app:info', () => ({
+    name: APP_NAME,
+    version: app.getVersion(),
+    title: appTitle(),
+    portable: isPortable()
+  }))
 
   ipcMain.handle('app:checkForUpdates', () => wrapIpc(() => checkForUpdates(true)))
 
