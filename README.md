@@ -58,7 +58,7 @@ The server cert is issued by private CA **Trader Internet Root CA**. Node’s Mo
 No MySQL. Drizzle ORM + **better-sqlite3** in main only.
 
 - File: `sieve.sqlite` under Electron `app.getPath('userData')` (not in this repo)
-- Tables: `accounts` (host, port, user, TLS prefs, last script), `settings` (window bounds, last account, indent)
+- Tables: `accounts` (host, port, user, TLS prefs, last script — one row per server+user), `settings` (window bounds, last account, indent)
 - Passwords: `safeStorage.encryptString` (Windows DPAPI), ciphertext in SQLite — never plaintext, never committed
 - Migrations: [`drizzle/`](drizzle/) — applied on startup
 
@@ -87,7 +87,7 @@ UI notes:
 - Script list: **include tree** from the active script (RFC 6609); unused scripts below
 - CodeMirror 6 + `@codemirror/legacy-modes` sieve mode; keywords from CAPABILITY `SIEVE`
 - Debounced server syntax check (~500ms): `CHECKSCRIPT` when advertised, otherwise PUTSCRIPT/DELETESCRIPT (RFC 5804 fallback). Local checks: unclosed strings, unmatched `[]` `()` `{}`, missing `,` in lists, missing `;` after commands.
-- Indent: tabs or spaces, width 2/4/8 (default **tab**, width **4**); `{` and `[` indent the same
+- Multiple servers/accounts: saved list on connect; **Disconnect** returns there. Socket drop stays in the editor with **Connect**.
 - Save limit **50K** (`sieve_maxscriptsize`)
 
 ## Out of scope

@@ -2,7 +2,7 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { app, safeStorage } from 'electron'
 import Database from 'better-sqlite3'
-import { eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import type { AccountInput, AccountRecord, EditorPrefs, TlsMode } from '../../shared/types'
@@ -69,17 +69,33 @@ function toRecord(row: typeof accounts.$inferSelect): AccountRecord {
 
 export function listAccounts(): AccountRecord[] {
   const database = openDb()
-  return database.select().from(accounts).all().map(toRecord)
+  return database.select().from(accounts).orderBy(desc(accounts.lastUsedAt)).all().map(toRecord)
+}
+
+function findByIdentity(
+  database: ReturnType<typeof openDb>,
+  host: string,
+  port: number,
+  username: string
+): typeof accounts.$inferSelect | undefined {
+  return database
+    .select()
+    .from(accounts)
+    .where(and(eq(accounts.host, host), eq(accounts.port, port), eq(accounts.username, username)))
+    .get()
 }
 
 export function saveAccount(input: AccountInput): AccountRecord {
   const database = openDb()
+  const match = findByIdentity(database, input.host, input.port, input.username)
+  const id = match?.id ?? input.id
+  const existing = id ? database.select().from(accounts).where(eq(accounts.id, id)).get() : undefined
   const passwordEnc =
     input.rememberPassword && input.password
       ? encryptPassword(input.password)
-      : input.id
-        ? database.select().from(accounts).where(eq(accounts.id, input.id)).get()?.passwordEnc
-        : null
+      : input.rememberPassword === false
+        ? null
+        : (existing?.passwordEnc ?? null)
 
   const values = {
     host: input.host,
@@ -87,21 +103,20 @@ export function saveAccount(input: AccountInput): AccountRecord {
     username: input.username,
     tlsMode: input.tlsMode,
     rejectUnauthorized: input.rejectUnauthorized,
-    passwordEnc: input.rememberPassword === false ? null : passwordEnc,
+    passwordEnc,
     lastUsedAt: Date.now()
   }
 
-  if (input.id) {
-    database.update(accounts).set(values).where(eq(accounts.id, input.id)).run()
-    const row = database.select().from(accounts).where(eq(accounts.id, input.id)).get()
+  if (existing) {
+    database.update(accounts).set(values).where(eq(accounts.id, existing.id)).run()
+    const row = database.select().from(accounts).where(eq(accounts.id, existing.id)).get()
     if (!row) throw new Error('account missing after update')
     setLastAccount(row.id)
     return toRecord(row)
   }
 
   database.insert(accounts).values(values).run()
-  const rows = database.select().from(accounts).all()
-  const row = rows[rows.length - 1]
+  const row = findByIdentity(database, input.host, input.port, input.username)
   if (!row) throw new Error('account missing after insert')
   setLastAccount(row.id)
   return toRecord(row)

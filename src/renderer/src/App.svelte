@@ -288,10 +288,27 @@
   }
 
   async function disconnect(): Promise<void> {
+    if (dirty && !confirm('Discard unsaved changes?')) return
     await window.api.sieve.disconnect()
     connected = false
+    account = null
+    capabilities = null
+    scripts = []
+    bodies = {}
+    currentName = null
+    draftName = ''
+    body = ''
+    original = ''
+    diagnostics = []
     error = ''
-    status = 'Disconnected'
+    status = ''
+    await loadAccounts()
+  }
+
+  async function removeSavedAccount(id: number): Promise<void> {
+    await window.api.accounts.remove(id)
+    if (lastInput?.id === id) lastInput = null
+    await loadAccounts()
   }
 
   onMount(() => window.api.sieve.onDisconnected((reason) => markDisconnected(reason)))
@@ -300,7 +317,14 @@
 </script>
 
 {#if !account}
-  <Login {accounts} {busy} {error} onconnect={connect} />
+  <Login
+    {accounts}
+    {busy}
+    {error}
+    preferredId={lastInput?.id ?? null}
+    onconnect={connect}
+    onremove={removeSavedAccount}
+  />
 {:else}
   <div class="flex h-full min-h-0 flex-col">
     <header class="flex items-center gap-3 border-b border-line bg-panel px-3 py-2">
