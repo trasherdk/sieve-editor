@@ -21,7 +21,7 @@ import {
   setOpenTabs,
 } from './db'
 import { ManageSieveClient } from './managesieve'
-import { checkForUpdates, resumeIncompletePortableUpdate, startAutoUpdate } from './updater'
+import { checkForUpdates, startAutoUpdate } from './updater'
 import { exportScriptFile, importScriptFile } from './files'
 
 function isPortable(): boolean {
@@ -270,7 +270,6 @@ app.whenReady().then(() => {
   electronApp.setAppUserModelId('dk.fumlersoft.sieve-editor')
   app.on('browser-window-created', (_, window) => optimizer.watchWindowShortcuts(window))
   registerIpc()
-  if (resumeIncompletePortableUpdate()) return
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

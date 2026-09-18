@@ -212,6 +212,15 @@ export function saveEditorPrefs(prefs: EditorPrefs): EditorPrefs {
   return next
 }
 
+export function getUpdateDownloadDir(): string | null {
+  const dir = openDb().select().from(settings).where(eq(settings.id, 1)).get()?.updateDownloadDir
+  return dir && dir.length > 0 ? dir : null
+}
+
+export function setUpdateDownloadDir(dir: string): void {
+  openDb().update(settings).set({ updateDownloadDir: dir }).where(eq(settings.id, 1)).run()
+}
+
 export function closeDb(): void {
   sqlite?.close()
   sqlite = null
