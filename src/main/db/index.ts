@@ -5,7 +5,7 @@ import Database from 'better-sqlite3'
 import { and, desc, eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
-import type { AccountInput, AccountRecord, EditorPrefs, TlsMode } from '../../shared/types'
+import type { AccountInput, AccountRecord, EditorPrefs, OpenTabs, TlsMode } from '../../shared/types'
 import { DEFAULT_INDENT_WITH_TABS, DEFAULT_TAB_SIZE } from '../../shared/types'
 import { accounts, settings } from './schema'
 
@@ -53,6 +53,19 @@ export function decryptPassword(blob: string | null | undefined): string | null 
   }
 }
 
+function parseOpenTabs(raw: string | null | undefined): OpenTabs | null {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as { names?: unknown; active?: unknown }
+    if (!Array.isArray(parsed.names)) return null
+    const names = parsed.names.filter((n): n is string => typeof n === 'string' && n.length > 0)
+    const active = typeof parsed.active === 'string' ? parsed.active : null
+    return { names, active }
+  } catch {
+    return null
+  }
+}
+
 function toRecord(row: typeof accounts.$inferSelect): AccountRecord {
   return {
     id: row.id,
@@ -62,6 +75,7 @@ function toRecord(row: typeof accounts.$inferSelect): AccountRecord {
     tlsMode: row.tlsMode as TlsMode,
     rejectUnauthorized: Boolean(row.rejectUnauthorized),
     lastScript: row.lastScript,
+    openTabs: parseOpenTabs(row.openTabs),
     lastUsedAt: row.lastUsedAt,
     hasPassword: Boolean(row.passwordEnc)
   }
@@ -133,6 +147,20 @@ export function getAccount(id: number): typeof accounts.$inferSelect | undefined
 
 export function setLastScript(id: number, name: string | null): void {
   openDb().update(accounts).set({ lastScript: name, lastUsedAt: Date.now() }).where(eq(accounts.id, id)).run()
+}
+
+export function setOpenTabs(id: number, session: OpenTabs): void {
+  const names = [...new Set(session.names.filter(Boolean))]
+  const active = session.active && names.includes(session.active) ? session.active : (names[names.length - 1] ?? null)
+  openDb()
+    .update(accounts)
+    .set({
+      openTabs: JSON.stringify({ names, active }),
+      lastScript: active,
+      lastUsedAt: Date.now()
+    })
+    .where(eq(accounts.id, id))
+    .run()
 }
 
 export function setLastAccount(id: number): void {

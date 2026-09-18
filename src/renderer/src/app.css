@@ -34,8 +34,9 @@ body {
   font-family: var(--font-mono);
 }
 
+/* Tailwind Preflight sets `border: 0 solid` on every element; CodeMirror's caret is a left border. */
 .cm-editor .cm-cursor,
-.cm-editor .cm-cursor-primary {
-  border-left-width: 1.2px !important;
-  border-left-style: solid !important;
+.cm-editor .cm-cursor-primary,
+.cm-editor .cm-cursor-secondary {
+  border-left: 1.2px solid #e6edf3 !important;
 }

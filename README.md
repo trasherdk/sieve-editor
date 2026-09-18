@@ -100,7 +100,8 @@ UI notes:
 - Debounced server syntax check (~500ms): `CHECKSCRIPT` when advertised, otherwise PUTSCRIPT/DELETESCRIPT (RFC 5804 fallback). Local checks: unclosed strings, unmatched `[]` `()` `{}`, missing `,` in lists, missing `;` after commands.
 - Multiple servers/accounts: saved list on connect; **Disconnect** returns there. Socket drop stays in the editor with **Connect**.
 - Save limit **50K** (`sieve_maxscriptsize`)
-- Script lifecycle: **Save** stays on the toolbar (**Ctrl+S** / **Cmd+S**). **Actions** menu: new, format (re-indent with the configured tab/spaces), duplicate, rename, activate (confirms; refuses syntax errors; unsaved buffers must be saved first), delete, export/import `.sieve` files. Import stays local until Save. Rename is put + optional setactive + delete.
+- Editor **tabs** above the buffer: open several scripts at once (tree click, New, Duplicate, Import). Unsaved tabs show a dot; × or middle-click closes with **Save** / **Discard**. Switching tabs keeps each buffer. Named tabs are restored on the next connect.
+- Script lifecycle: **Save** stays on the toolbar (**Ctrl+S** / **Cmd+S**). **Actions** menu: new, format (re-indent with the configured tab/spaces), duplicate, rename, activate (confirms; refuses syntax errors; unsaved buffers must be saved first), delete, export/import `.sieve` files. Import opens a new tab until Save. Rename is put + optional setactive + delete.
 
 ## Out of scope
 

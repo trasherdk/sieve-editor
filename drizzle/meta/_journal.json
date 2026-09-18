@@ -15,6 +15,13 @@
       "when": 1726600000000,
       "tag": "0001_indent",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1726700000000,
+      "tag": "0002_open_tabs",
+      "breakpoints": true
     }
   ]
 }

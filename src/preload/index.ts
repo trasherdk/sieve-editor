@@ -14,7 +14,8 @@ const api: SieveApi = {
   accounts: {
     list: () => ipcRenderer.invoke('accounts:list'),
     save: (input: AccountInput) => ipcRenderer.invoke('accounts:save', input),
-    remove: (id: number) => ipcRenderer.invoke('accounts:remove', id)
+    remove: (id: number) => ipcRenderer.invoke('accounts:remove', id),
+    setOpenTabs: (id, tabs) => ipcRenderer.invoke('accounts:setOpenTabs', id, tabs)
   },
   sieve: {
     connect: (input: AccountInput) => ipcRenderer.invoke('sieve:connect', input),

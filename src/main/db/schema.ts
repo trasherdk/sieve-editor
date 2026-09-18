@@ -8,6 +8,7 @@ export const accounts = sqliteTable('accounts', {
   tlsMode: text('tls_mode').notNull().default('starttls'),
   rejectUnauthorized: integer('reject_unauthorized', { mode: 'boolean' }).notNull().default(true),
   lastScript: text('last_script'),
+  openTabs: text('open_tabs'),
   passwordEnc: text('password_enc'),
   lastUsedAt: integer('last_used_at')
 })

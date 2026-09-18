@@ -121,6 +121,10 @@
         ]
       })
     })
+    queueMicrotask(() => {
+      view?.requestMeasure()
+      view?.focus()
+    })
     return () => view?.destroy()
   })
 
@@ -149,4 +153,4 @@
   })
 </script>
 
-<div class="h-full min-h-0" bind:this={parent}></div>
+<div class="h-full min-h-0 [&_.cm-editor]:h-full" bind:this={parent}></div>
