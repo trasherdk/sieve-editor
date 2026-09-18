@@ -1,7 +1,9 @@
 import { execFileSync, execSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { buildReleaseNotes } from './changelog.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 process.chdir(root)
@@ -108,12 +110,15 @@ if (!isAncestor('origin/main', 'HEAD')) {
   fail('develop is still not a continuation of origin/main after merge.')
 }
 
+const changes = buildReleaseNotes(tag, 'HEAD')
 const title = `Release ${tag}`
 const body = [
-  '## Summary',
+  changes.trim(),
+  '',
+  '## Release mechanics',
   `- Promote \`develop\` to \`main\` for **${tag}**.`,
   '- After merge, `develop` is fast-forwarded to `main` so both point at the same commit.',
-  '- GitHub Actions will attach Windows (NSIS setup + portable) and Linux (AppImage + .deb) binaries to the GitHub Release.'
+  '- GitHub Actions will attach Windows (NSIS setup + portable) and Linux (AppImage + .deb) binaries.'
 ].join('\n')
 
 let pr = ''
@@ -167,6 +172,15 @@ if (tip !== finalMain || tip !== finalDevelop) {
 
 gitRun(['tag', '-a', tag, tip, '-m', tag])
 gitRun(['push', 'origin', tag])
+
+const notesFile = join(tmpdir(), `sieve-${tag}-notes.md`)
+writeFileSync(notesFile, changes)
+try {
+  gh(['release', 'view', tag])
+  gh(['release', 'edit', tag, '--title', `Sieve ${tag}`, '--notes-file', notesFile])
+} catch {
+  gh(['release', 'create', tag, '--title', `Sieve ${tag}`, '--notes-file', notesFile])
+}
 
 console.log(`Tagged ${tag} at ${tip}`)
 console.log(`origin/main and origin/develop are ${tip}`)
