@@ -7,6 +7,10 @@ const api: SieveApi = {
     info: () => ipcRenderer.invoke('app:info'),
     checkForUpdates: () => ipcRenderer.invoke('app:checkForUpdates')
   },
+  files: {
+    exportScript: (suggestedName, content) => ipcRenderer.invoke('files:export', suggestedName, content),
+    importScript: () => ipcRenderer.invoke('files:import')
+  },
   accounts: {
     list: () => ipcRenderer.invoke('accounts:list'),
     save: (input: AccountInput) => ipcRenderer.invoke('accounts:save', input),

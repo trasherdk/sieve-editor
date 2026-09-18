@@ -21,6 +21,7 @@ import {
 } from './db'
 import { ManageSieveClient } from './managesieve'
 import { checkForUpdates, startAutoUpdate } from './updater'
+import { exportScriptFile, importScriptFile } from './files'
 
 function appTitle(): string {
   return `${APP_NAME} ${app.getVersion()}`
@@ -167,6 +168,12 @@ function registerIpc(): void {
   ipcMain.handle('app:info', () => ({ name: APP_NAME, version: app.getVersion() }))
 
   ipcMain.handle('app:checkForUpdates', () => wrapIpc(() => checkForUpdates(true)))
+
+  ipcMain.handle('files:export', (_e, suggestedName: string, content: string) =>
+    wrapIpc(() => exportScriptFile(mainWindow, suggestedName, content))
+  )
+
+  ipcMain.handle('files:import', () => wrapIpc(() => importScriptFile(mainWindow)))
 
   ipcMain.handle('accounts:list', () => wrapIpc(() => listAccounts()))
 

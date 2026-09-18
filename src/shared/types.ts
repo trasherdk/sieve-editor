@@ -3,6 +3,11 @@ export const DEFAULT_INDENT_WITH_TABS = true
 export const MAX_SCRIPT_BYTES = 50 * 1024
 export const DEFAULT_HOST = 'mail.fumlersoft.dk'
 export const DEFAULT_PORT = 4190
+export const MAX_SCRIPT_NAME = 256
+
+export function sanitizeScriptName(raw: string): string {
+  return raw.trim().replace(/[\r\n\0]/g, '').slice(0, MAX_SCRIPT_NAME)
+}
 
 export type EditorPrefs = {
   indentWithTabs: boolean
@@ -73,11 +78,19 @@ export type AppInfo = {
   version: string
 }
 
+export type FileExportResult = { canceled: true } | { canceled: false; path: string }
+
+export type FileImportResult = { canceled: true } | { canceled: false; name: string; content: string }
+
 export type SieveApi = {
   ping: () => Promise<string>
   app: {
     info: () => Promise<AppInfo>
     checkForUpdates: () => Promise<void>
+  }
+  files: {
+    exportScript: (suggestedName: string, content: string) => Promise<FileExportResult>
+    importScript: () => Promise<FileImportResult>
   }
   accounts: {
     list: () => Promise<AccountRecord[]>
