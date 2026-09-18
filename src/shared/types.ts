@@ -16,6 +16,11 @@ export type EditorPrefs = {
 
 export type TlsMode = 'starttls' | 'optional' | 'plaintext'
 
+export type OpenTabs = {
+  names: string[]
+  active: string | null
+}
+
 export type AccountRecord = {
   id: number
   host: string
@@ -24,6 +29,7 @@ export type AccountRecord = {
   tlsMode: TlsMode
   rejectUnauthorized: boolean
   lastScript: string | null
+  openTabs: OpenTabs | null
   lastUsedAt: number | null
   hasPassword: boolean
 }
@@ -98,6 +104,7 @@ export type SieveApi = {
     list: () => Promise<AccountRecord[]>
     save: (input: AccountInput) => Promise<AccountRecord>
     remove: (id: number) => Promise<void>
+    setOpenTabs: (id: number, tabs: OpenTabs) => Promise<void>
   }
   sieve: {
     connect: (input: AccountInput) => Promise<ConnectResult>

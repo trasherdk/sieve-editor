@@ -1,8 +1,7 @@
 import { app, dialog, shell, type BrowserWindow } from 'electron'
 import { is } from '@electron-toolkit/utils'
-import electronUpdater from 'electron-updater'
 import { spawn } from 'node:child_process'
-import { createWriteStream, existsSync, readdirSync, writeFileSync } from 'node:fs'
+import { chmodSync, createWriteStream, existsSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { APP_NAME, GITHUB_OWNER, GITHUB_REPO } from '../shared/app'
@@ -19,7 +18,6 @@ type GithubRelease = {
 
 let started = false
 let checking = false
-let updaterReady = false
 let getWindow: () => BrowserWindow | null = () => null
 
 function currentWindow(): BrowserWindow | null {
@@ -74,37 +72,6 @@ async function latestRelease(): Promise<GithubRelease> {
   return (await res.json()) as GithubRelease
 }
 
-function autoUpdater() {
-  const { autoUpdater: updater } = electronUpdater
-  if (!updaterReady) {
-    updater.autoDownload = false
-    updater.autoInstallOnAppQuit = true
-    updater.logger = {
-      info: (...a) => console.log('[updater]', ...a),
-      warn: (...a) => console.warn('[updater]', ...a),
-      error: (...a) => console.error('[updater]', ...a),
-      debug: (...a) => console.debug('[updater]', ...a)
-    }
-    if (process.platform === 'win32') {
-      const nsis = updater as typeof updater & {
-        verifyUpdateCodeSignature: (
-          publisherName: string[],
-          path: string
-        ) => Promise<string | null>
-      }
-      nsis.verifyUpdateCodeSignature = async () => null
-    }
-    updater.on('download-progress', (p) => {
-      currentWindow()?.setProgressBar(Math.min(1, Math.max(0, p.percent / 100)))
-    })
-    updater.on('update-downloaded', () => {
-      currentWindow()?.setProgressBar(-1)
-    })
-    updaterReady = true
-  }
-  return updater
-}
-
 async function askToUpdate(version: string): Promise<boolean> {
   const { response } = await showBox({
     type: 'info',
@@ -118,17 +85,36 @@ async function askToUpdate(version: string): Promise<boolean> {
   return response === 0
 }
 
-async function askToRestart(install: () => void): Promise<void> {
+async function askToApply(kind: Channel, install: () => void): Promise<void> {
+  const nsis = kind === 'nsis'
   const { response } = await showBox({
     type: 'info',
     title: `${APP_NAME} update`,
-    message: 'The update is ready to install.',
-    detail: `Restart ${APP_NAME} now?`,
-    buttons: ['Restart', 'Later'],
+    message: nsis ? 'The installer is ready to run.' : 'The update is ready to install.',
+    detail: nsis
+      ? `Saved. Run the ${APP_NAME} installer now?`
+      : `Restart ${APP_NAME} now?`,
+    buttons: nsis ? ['Run', 'Later'] : ['Restart', 'Later'],
     defaultId: 0,
     cancelId: 1
   })
   if (response === 0) install()
+}
+
+async function askSavePath(defaultPath: string, extensions: string[]): Promise<string | null> {
+  const options = {
+    title: `Save ${APP_NAME} update`,
+    defaultPath,
+    buttonLabel: 'Save',
+    filters: [
+      { name: 'Update', extensions },
+      { name: 'All files', extensions: ['*'] }
+    ]
+  }
+  const w = currentWindow()
+  const result = w ? await dialog.showSaveDialog(w, options) : await dialog.showSaveDialog(options)
+  if (result.canceled || !result.filePath) return null
+  return result.filePath
 }
 
 async function showUpToDate(): Promise<void> {
@@ -211,12 +197,6 @@ async function downloadFile(url: string, dest: string, size?: number): Promise<v
 
 const PORTABLE_PENDING = '.sieve-editor-update.exe'
 
-function portableAssetFileName(assetName: string): string {
-  const base = basename(assetName.replaceAll('\\', '/'))
-  if (!/^[A-Za-z0-9._-]+\.exe$/i.test(base)) return ''
-  return base
-}
-
 function launchPortableExe(exe: string): void {
   spawn(exe, [], { detached: true, stdio: 'ignore', cwd: dirname(exe) }).unref()
 }
@@ -266,7 +246,8 @@ function writeDeleteAfterExitScript(): string {
 function quitAndReplacePortable(downloaded: string, oldExe: string, nextExe: string): void {
   const same = oldExe.toLowerCase() === nextExe.toLowerCase()
   if (!same) {
-    orphanWscript(writeDeleteAfterExitScript(), [String(process.pid), oldExe])
+    const sameDir = dirname(nextExe).toLowerCase() === dirname(oldExe).toLowerCase()
+    if (sameDir) orphanWscript(writeDeleteAfterExitScript(), [String(process.pid), oldExe])
     launchPortableExe(nextExe)
     setTimeout(() => app.exit(0), 200)
     return
@@ -320,44 +301,74 @@ export function resumeIncompletePortableUpdate(): boolean {
   return true
 }
 
-async function updatePortable(release: GithubRelease): Promise<void> {
+function findAsset(
+  release: GithubRelease,
+  kind: Channel
+): GithubRelease['assets'][0] | undefined {
+  if (kind === 'portable') return release.assets.find((a) => /portable\.exe$/i.test(a.name))
+  if (kind === 'nsis') return release.assets.find((a) => /setup\.exe$/i.test(a.name))
+  if (kind === 'appimage') return release.assets.find((a) => /\.AppImage$/i.test(a.name))
+  return undefined
+}
+
+function defaultUpdateDir(kind: Channel): string {
+  if (kind === 'portable' && process.env.PORTABLE_EXECUTABLE_DIR) {
+    return process.env.PORTABLE_EXECUTABLE_DIR
+  }
+  if (kind === 'appimage' && process.env.APPIMAGE) return dirname(process.env.APPIMAGE)
+  return app.getPath('downloads')
+}
+
+function assetExtensions(kind: Channel): string[] {
+  if (kind === 'appimage') return ['AppImage']
+  return ['exe']
+}
+
+async function updateFromRelease(release: GithubRelease, kind: Channel): Promise<void> {
   const version = tagVersion(release.tag_name)
-  const asset = release.assets.find((a) => /portable\.exe$/i.test(a.name))
-  const oldExe = portableExePath()
-  const dir = process.env.PORTABLE_EXECUTABLE_DIR
-  const nextName = asset ? portableAssetFileName(asset.name) : ''
-  if (!asset || !oldExe || !dir || !nextName) {
+  const asset = findAsset(release, kind)
+  if (!asset) {
     await openReleasePage(
       release.html_url,
       version,
-      'Could not find a portable download for this install.'
+      'Could not find a download for this install.'
     )
     return
   }
   if (!(await askToUpdate(version))) return
-  const nextExe = join(dir, nextName)
-  const same = oldExe.toLowerCase() === nextExe.toLowerCase()
-  const dest = same ? join(dir, PORTABLE_PENDING) : nextExe
+  const suggested = join(defaultUpdateDir(kind), basename(asset.name.replaceAll('\\', '/')))
+  const chosen = await askSavePath(suggested, assetExtensions(kind))
+  if (!chosen) return
+  const oldPortable = kind === 'portable' ? portableExePath() : null
+  const runningAppImage = kind === 'appimage' ? process.env.APPIMAGE || null : null
+  const locked =
+    (oldPortable && chosen.toLowerCase() === oldPortable.toLowerCase()) ||
+    (runningAppImage && chosen.toLowerCase() === runningAppImage.toLowerCase())
+  const dest = locked
+    ? kind === 'appimage'
+      ? `${chosen}.new`
+      : join(dirname(chosen), PORTABLE_PENDING)
+    : chosen
   try {
     await downloadFile(asset.browser_download_url, dest, asset.size)
-    await askToRestart(() => quitAndReplacePortable(dest, oldExe, nextExe))
+    if (kind === 'appimage') {
+      try {
+        chmodSync(dest, 0o755)
+      } catch {
+        /* launch may still work */
+      }
+    }
+    await askToApply(kind, () => {
+      if (kind === 'portable' && oldPortable) {
+        quitAndReplacePortable(dest, oldPortable, chosen)
+        return
+      }
+      spawn(dest, [], { detached: true, stdio: 'ignore', cwd: dirname(dest) }).unref()
+      app.quit()
+    })
   } catch (err) {
     await showUpdateError(err, 'The update could not be downloaded.')
   }
-}
-
-async function updateWithElectron(manual: boolean): Promise<boolean> {
-  const updater = autoUpdater()
-  const result = await updater.checkForUpdates()
-  const version = result?.updateInfo?.version
-  if (!version || !isNewer(version, app.getVersion())) {
-    if (manual) await showUpToDate()
-    return true
-  }
-  if (!(await askToUpdate(version))) return true
-  await updater.downloadUpdate()
-  await askToRestart(() => updater.quitAndInstall())
-  return true
 }
 
 export async function checkForUpdates(manual = false): Promise<void> {
@@ -376,31 +387,20 @@ export async function checkForUpdates(manual = false): Promise<void> {
   checking = true
   try {
     const kind = channel()
-    if (kind === 'nsis' || kind === 'appimage') {
-      try {
-        const handled = await updateWithElectron(manual)
-        if (handled) return
-      } catch (err) {
-        console.error('[updater]', err)
-      }
-    }
-
     const release = await latestRelease()
     const version = tagVersion(release.tag_name)
     if (!isNewer(version, app.getVersion())) {
       if (manual) await showUpToDate()
       return
     }
-    if (kind === 'portable' && process.platform === 'win32') {
-      await updatePortable(release)
+    if (kind === 'portable' || kind === 'nsis' || kind === 'appimage') {
+      await updateFromRelease(release, kind)
       return
     }
     await openReleasePage(
       release.html_url,
       version,
-      kind === 'page'
-        ? 'This package cannot apply an in-app installer. Download the new file from GitHub.'
-        : 'In-app install was not available; download from GitHub instead.'
+      'This package cannot apply an in-app installer. Download the new file from GitHub.'
     )
   } catch (err) {
     console.error('[updater]', err)

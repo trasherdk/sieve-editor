@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { APP_NAME } from '../shared/app'
 import { MAX_SCRIPT_BYTES } from '../shared/types'
-import type { AccountInput, Capabilities, EditorPrefs, ScriptBodies, SieveScript } from '../shared/types'
+import type { AccountInput, Capabilities, EditorPrefs, OpenTabs, ScriptBodies, SieveScript } from '../shared/types'
 import {
   closeDb,
   decryptPassword,
@@ -17,7 +17,9 @@ import {
   saveAccount,
   saveEditorPrefs,
   saveWindowBounds,
-  setLastScript
+  setLastScript,
+  setOpenTabs,
+  setLastAccount
 } from './db'
 import { ManageSieveClient } from './managesieve'
 import { checkForUpdates, resumeIncompletePortableUpdate, startAutoUpdate } from './updater'
@@ -190,6 +192,10 @@ function registerIpc(): void {
   ipcMain.handle('accounts:save', (_e, input: AccountInput) => wrapIpc(() => saveAccount(input)))
 
   ipcMain.handle('accounts:remove', (_e, id: number) => wrapIpc(() => removeAccount(id)))
+
+  ipcMain.handle('accounts:setOpenTabs', (_e, id: number, session: OpenTabs) =>
+    wrapIpc(() => setOpenTabs(id, session))
+  )
 
   ipcMain.handle('sieve:connect', async (_e, input: AccountInput) => {
     await disconnect()
