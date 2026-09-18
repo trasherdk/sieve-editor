@@ -815,7 +815,7 @@
             <button
               type="button"
               role="menuitem"
-              class="block w-full px-3 py-1.5 text-left text-sm hover:bg-ink"
+              class="block w-full px-3 py-1.5 text-left text-sm hover:bg-hover hover:text-zinc-100"
               onclick={newScript}
             >
               New
@@ -823,7 +823,7 @@
             <button
               type="button"
               role="menuitem"
-              class="block w-full px-3 py-1.5 text-left text-sm hover:bg-ink disabled:opacity-50"
+              class="block w-full px-3 py-1.5 text-left text-sm hover:bg-hover hover:text-zinc-100 disabled:opacity-50"
               disabled={!tab}
               onclick={format}
             >
@@ -832,7 +832,7 @@
             <button
               type="button"
               role="menuitem"
-              class="block w-full px-3 py-1.5 text-left text-sm hover:bg-ink disabled:opacity-50"
+              class="block w-full px-3 py-1.5 text-left text-sm hover:bg-hover hover:text-zinc-100 disabled:opacity-50"
               disabled={!connected || !tab}
               onclick={() => void duplicate()}
             >
@@ -841,7 +841,7 @@
             <button
               type="button"
               role="menuitem"
-              class="block w-full px-3 py-1.5 text-left text-sm hover:bg-ink disabled:opacity-50"
+              class="block w-full px-3 py-1.5 text-left text-sm hover:bg-hover hover:text-zinc-100 disabled:opacity-50"
               disabled={!connected || !currentName}
               onclick={() => void rename()}
             >
@@ -851,7 +851,7 @@
             <button
               type="button"
               role="menuitem"
-              class="block w-full px-3 py-1.5 text-left text-sm hover:bg-ink disabled:opacity-50"
+              class="block w-full px-3 py-1.5 text-left text-sm hover:bg-hover hover:text-zinc-100 disabled:opacity-50"
               disabled={!connected || !tab || hasErrors || (!currentName && !dirty) || (currentIsActive && !dirty)}
               title={hasErrors
                 ? 'Fix syntax errors before activating'
@@ -865,7 +865,7 @@
             <button
               type="button"
               role="menuitem"
-              class="block w-full px-3 py-1.5 text-left text-sm text-red-300 hover:bg-ink disabled:opacity-50"
+              class="block w-full px-3 py-1.5 text-left text-sm text-red-300 hover:bg-bad/30 hover:text-red-100 disabled:opacity-50"
               disabled={!connected || !currentName}
               onclick={() => void remove()}
             >
@@ -875,7 +875,7 @@
             <button
               type="button"
               role="menuitem"
-              class="block w-full px-3 py-1.5 text-left text-sm hover:bg-ink disabled:opacity-50"
+              class="block w-full px-3 py-1.5 text-left text-sm hover:bg-hover hover:text-zinc-100 disabled:opacity-50"
               disabled={!tab}
               onclick={() => void exportScript()}
             >
@@ -884,7 +884,7 @@
             <button
               type="button"
               role="menuitem"
-              class="block w-full px-3 py-1.5 text-left text-sm hover:bg-ink"
+              class="block w-full px-3 py-1.5 text-left text-sm hover:bg-hover hover:text-zinc-100"
               onclick={() => void importScript()}
             >
               Import…

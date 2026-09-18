@@ -5,7 +5,10 @@
   --font-mono: 'Cascadia Code', 'Consolas', ui-monospace, monospace;
   --color-ink: #0f1419;
   --color-panel: #161b22;
+  --color-tab: #1c242e;
+  --color-tab-active: #252e3a;
   --color-line: #30363d;
+  --color-hover: #2d333b;
   --color-accent: #3d9cf0;
   --color-ok: #3fb950;
   --color-warn: #d29922;
