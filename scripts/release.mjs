@@ -15,8 +15,21 @@ function git(args, opts = {}) {
   return execFileSync('git', args, { encoding: 'utf8', ...opts }).trim()
 }
 
+function gitRun(args) {
+  execFileSync('git', args, { stdio: 'inherit' })
+}
+
 function gh(args, opts = {}) {
   return execFileSync('gh', args, { encoding: 'utf8', ...opts }).trim()
+}
+
+function isAncestor(maybeAncestor, rev) {
+  try {
+    git(['merge-base', '--is-ancestor', maybeAncestor, rev])
+    return true
+  } catch {
+    return false
+  }
 }
 
 function pkg() {
@@ -63,7 +76,8 @@ try {
   fail('gh is not authenticated. Run: gh auth login -p ssh')
 }
 
-git(['fetch', 'origin'])
+gitRun(['fetch', 'origin', '--prune', '--tags'])
+
 const head = git(['rev-parse', 'HEAD'])
 const remoteDevelop = git(['rev-parse', 'origin/develop'])
 if (head !== remoteDevelop) {
@@ -72,22 +86,33 @@ if (head !== remoteDevelop) {
   fail(`develop is not synced with origin/develop (ahead ${ahead}, behind ${behind}).`)
 }
 
+if (!isAncestor('origin/main', 'HEAD')) {
+  console.log('Merging origin/main into develop so develop continues from main')
+  gitRun(['merge', 'origin/main', '-m', 'Merge origin/main into develop'])
+  gitRun(['push', 'origin', 'HEAD'])
+}
+
 let version = pkg().version
 if (bumpArg) {
   version = bumpVersion(bumpArg)
   git(['add', 'package.json'])
-  git(['commit', '-m', `chore: release v${version}`], { stdio: 'inherit' })
-  execFileSync('git', ['push', 'origin', 'HEAD'], { stdio: 'inherit' })
+  gitRun(['commit', '-m', `chore: release v${version}`])
+  gitRun(['push', 'origin', 'HEAD'])
 }
 
 const tag = `v${version}`
 const existing = execSync(`git ls-remote --tags origin ${tag}`, { encoding: 'utf8' }).trim()
 if (existing) fail(`Tag ${tag} already exists on origin.`)
 
+if (!isAncestor('origin/main', 'HEAD')) {
+  fail('develop is still not a continuation of origin/main after merge.')
+}
+
 const title = `Release ${tag}`
 const body = [
   '## Summary',
   `- Promote \`develop\` to \`main\` for **${tag}**.`,
+  '- After merge, `develop` is fast-forwarded to `main` so both point at the same commit.',
   '- GitHub Actions will attach Windows (NSIS setup + portable) and Linux (AppImage + .deb) binaries to the GitHub Release.'
 ].join('\n')
 
@@ -118,11 +143,32 @@ if (!pr || pr === 'null') {
 
 execFileSync('gh', ['pr', 'merge', pr, '--merge', '--delete-branch=false'], { stdio: 'inherit' })
 
-git(['fetch', 'origin', 'main', '--tags'])
-const main = git(['rev-parse', 'origin/main'])
-execFileSync('git', ['tag', '-a', tag, main, '-m', tag], { stdio: 'inherit' })
-execFileSync('git', ['push', 'origin', tag], { stdio: 'inherit' })
+gitRun(['fetch', 'origin', 'main', 'develop', '--tags'])
 
-console.log(`Tagged ${tag} at ${main}`)
+const originMain = git(['rev-parse', 'origin/main'])
+if (git(['rev-parse', 'HEAD']) !== originMain) {
+  gitRun(['merge', '--ff-only', 'origin/main'])
+  gitRun(['push', 'origin', 'HEAD:develop'])
+}
+
+try {
+  git(['branch', '-f', 'main', 'origin/main'])
+} catch {
+  // local main may not exist
+}
+
+gitRun(['fetch', 'origin', 'main', 'develop'])
+const tip = git(['rev-parse', 'HEAD'])
+const finalMain = git(['rev-parse', 'origin/main'])
+const finalDevelop = git(['rev-parse', 'origin/develop'])
+if (tip !== finalMain || tip !== finalDevelop) {
+  fail(`develop and main are not the same after release (HEAD ${tip}, origin/main ${finalMain}, origin/develop ${finalDevelop}).`)
+}
+
+gitRun(['tag', '-a', tag, tip, '-m', tag])
+gitRun(['push', 'origin', tag])
+
+console.log(`Tagged ${tag} at ${tip}`)
+console.log(`origin/main and origin/develop are ${tip}`)
 console.log(`Release: https://github.com/trasherdk/sieve-editor/releases/tag/${tag}`)
 console.log('Binaries will appear on that release when the Release workflow finishes.')
