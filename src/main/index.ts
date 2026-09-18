@@ -19,7 +19,6 @@ import {
   saveWindowBounds,
   setLastScript,
   setOpenTabs,
-  setLastAccount
 } from './db'
 import { ManageSieveClient } from './managesieve'
 import { checkForUpdates, resumeIncompletePortableUpdate, startAutoUpdate } from './updater'

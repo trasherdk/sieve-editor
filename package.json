@@ -3,8 +3,8 @@
   "version": "0.5.0",
   "description": "Sieve script editor for Cyrus ManageSieve",
   "main": "./out/main/index.js",
-  "author": "fumlersoft",
-  "homepage": "https://mail.fumlersoft.dk",
+  "author": "TrasherDK",
+  "homepage": "https://github.com/trasherdk/sieve-editor",
   "repository": {
     "type": "git",
     "url": "https://github.com/trasherdk/sieve-editor.git"
