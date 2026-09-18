@@ -89,7 +89,7 @@ The script fails unless the current branch is `develop` and it matches `origin/d
 
 Linux artifacts are built on Ubuntu runners; they are not tested on a local Linux desktop. macOS is not in this flow (no signing/notarization). `gh` must be logged in (`gh auth login -p ssh`).
 
-Packaged builds check GitHub Releases on startup (and when you click the version next to the app name). If a newer **published** release exists, the app asks whether to update. **NSIS** and **AppImage** apply the installer in-app; **portable** replaces its own `.exe`; **.deb** opens the GitHub download page. Draft or empty GitHub Releases are invisible to the updater. Builds are unsigned, so Windows may still warn on SmartScreen.
+Packaged builds check GitHub Releases on startup (and when you click the version next to the app name). If a newer **published** release exists, the app asks whether to update, then a **Save** dialog for the file (setup defaults to Downloads, portable to its own folder). **NSIS** then offers to run the installer; **portable** / **AppImage** offer to restart into the new file; **.deb** opens the GitHub download page. Draft or empty GitHub Releases are invisible to the updater. Builds are unsigned, so Windows may still warn on SmartScreen.
 
 The Windows setup wizard asks where to install (not one-click). Shortcut and window title are **Sieve Editor**, with the version next to the name.
 
