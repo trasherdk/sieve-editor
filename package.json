@@ -1,6 +1,6 @@
 {
   "name": "sieve-editor",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Sieve script editor for Cyrus ManageSieve",
   "main": "./out/main/index.js",
   "author": "fumlersoft",
@@ -27,7 +27,8 @@
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "better-sqlite3": "^12.4.1",
-    "drizzle-orm": "^0.45.2"
+    "drizzle-orm": "^0.45.2",
+    "electron-updater": "^6.8.9"
   },
   "devDependencies": {
     "@codemirror/autocomplete": "^6.18.6",

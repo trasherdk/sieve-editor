@@ -18,6 +18,7 @@ import {
   setLastScript
 } from './db'
 import { ManageSieveClient } from './managesieve'
+import { startAutoUpdate } from './updater'
 
 const IDLE_MS = 15 * 60 * 1000
 
@@ -119,7 +120,10 @@ function createWindow(): void {
     }
   })
 
-  mainWindow.on('ready-to-show', () => mainWindow?.show())
+  mainWindow.on('ready-to-show', () => {
+    mainWindow?.show()
+    startAutoUpdate(() => mainWindow)
+  })
   mainWindow.on('close', () => {
     if (!mainWindow) return
     const b = mainWindow.getBounds()
