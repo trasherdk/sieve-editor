@@ -67,16 +67,20 @@ Ship from a **clean `develop`** that matches **`origin/develop`**:
 
 ```bash
 cd sieve-editor
-pnpm.cmd release
+pnpm release
 ```
 
 Optional version bump first (`package.json` is currently **0.1.0**):
 
 ```bash
-pnpm.cmd release -- --bump patch
+pnpm release -- --bump patch
+
+pnpm release -- --bump minor
+
+pnpm release -- --bump major
 ```
 
-The script fails unless the current branch is `develop` and it matches `origin/develop`. If `origin/main` has commits that are not in `develop` (for example a previous merge commit), it merges `main` into `develop` first. After the Release PR is merged, it fast-forwards `develop` to `main` so **both branches are the same commit**, tags `vX.Y.Z`, and GitHub Actions builds unsigned binaries onto that GitHub Release:
+The script fails unless the current branch is `develop` and it matches `origin/develop`. If `origin/main` has commits that are not in `develop` (for example a previous merge commit), it merges `main` into `develop` first. After the Release PR is merged, it fast-forwards `develop` to `main` so **both branches are the same commit**, tags `vX.Y.Z`, writes **release notes from commits since the previous tag**, and GitHub Actions attaches Windows (NSIS setup + portable) and Linux (AppImage + .deb) binaries.
 
 | Platform | Installer | Portable |
 | --- | --- | --- |
