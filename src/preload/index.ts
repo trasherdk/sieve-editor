@@ -3,6 +3,10 @@ import type { AccountInput, SieveApi } from '../shared/types'
 
 const api: SieveApi = {
   ping: () => ipcRenderer.invoke('ping'),
+  app: {
+    info: () => ipcRenderer.invoke('app:info'),
+    checkForUpdates: () => ipcRenderer.invoke('app:checkForUpdates')
+  },
   accounts: {
     list: () => ipcRenderer.invoke('accounts:list'),
     save: (input: AccountInput) => ipcRenderer.invoke('accounts:save', input),
