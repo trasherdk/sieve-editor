@@ -30,28 +30,7 @@ Main uses `contextIsolation: true` and `nodeIntegration: false`. The renderer ne
 
 Cyrus allows **one active script**. Syntax errors come back as `NO "line N: …"`. Script bodies use ManageSieve literals (`{n+}` / `{n}`).
 
-## Cyrus / network
-
-Host and port are editable in the login form (default port **4190**). Against Cyrus, that is `timsieved`.
-
-On this mail host, `/etc/services` maps **`sieve` → 4190/tcp**, not 2000. `timsieved` listens on `0.0.0.0:4190`. Firewall `--dport sieve` therefore opens 4190. Two `cyrus.conf` lines (`listen="sieve"` and `listen="4190"`) are the **same port**. Default `nmap` without `-p` misses 4190 (not in the top 1000).
-
-SASL: **PLAIN** and **LOGIN**. Always STARTTLS after the greeting when the server offers it. After TLS, the `STARTTLS` capability is gone; SASL stays PLAIN/LOGIN.
-
-### TLS on the mail host (already hit this)
-
-Certs live in `/var/imap/certs/`, not Apache’s tree (the `cyrus` user could not read `/etc/httpd/certs`):
-
-```conf
-tls_server_cert: /var/imap/certs/mail.fumlersoft.dk.crt
-tls_server_key:  /var/imap/certs/mail.fumlersoft.dk.key
-```
-
-The key must be readable by group `cyrus` (`640 root:cyrus`). `STARTTLS` otherwise returns `NO "Error initializing TLS"`. Reload/restart Cyrus after path or mode changes (`prefork=1` keeps old children).
-
-In Cyrus 3.8, **`tls_server_ca_file` is not the chain you present to clients**. It is CAs used when Cyrus acts as a *client*. Put the full chain in `tls_server_cert`.
-
-The server cert is issued by private CA **Trader Internet Root CA**. Node’s Mozilla bundle fails (`UNABLE_TO_VERIFY_LEAF_SIGNATURE`). This Windows box trusts that root in the OS store; the app uses `tls.getCACertificates('system')`. Login can still allow plaintext or skip cert verify as a fallback.
+Host and port are editable (default port **4190**, Cyrus `timsieved`). SASL **PLAIN** and **LOGIN**. STARTTLS when the server offers it. TLS verification uses the OS trust store, not Node’s Mozilla bundle; login can skip verify or allow plaintext as a fallback.
 
 ## Local data
 
