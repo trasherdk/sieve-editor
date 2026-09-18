@@ -76,7 +76,7 @@ Optional version bump first (`package.json` is currently **0.1.0**):
 pnpm.cmd release -- --bump patch
 ```
 
-The script fails unless the current branch is `develop` and it is synced with GitHub. Then it opens a Release PR to `main`, merges it, tags `vX.Y.Z`, pushes the tag, and GitHub Actions builds unsigned binaries onto that GitHub Release:
+The script fails unless the current branch is `develop` and it matches `origin/develop`. If `origin/main` has commits that are not in `develop` (for example a previous merge commit), it merges `main` into `develop` first. After the Release PR is merged, it fast-forwards `develop` to `main` so **both branches are the same commit**, tags `vX.Y.Z`, and GitHub Actions builds unsigned binaries onto that GitHub Release:
 
 | Platform | Installer | Portable |
 | --- | --- | --- |
