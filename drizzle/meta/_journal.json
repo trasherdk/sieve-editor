@@ -22,6 +22,13 @@
       "when": 1726700000000,
       "tag": "0002_open_tabs",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1726800000000,
+      "tag": "0003_update_download_dir",
+      "breakpoints": true
     }
   ]
 }

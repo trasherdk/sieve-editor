@@ -1,10 +1,10 @@
 import { app, dialog, shell, type BrowserWindow } from 'electron'
 import { is } from '@electron-toolkit/utils'
 import { spawn } from 'node:child_process'
-import { chmodSync, createWriteStream, existsSync, readdirSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { basename, dirname, join } from 'node:path'
+import { chmodSync, createWriteStream, existsSync, readdirSync } from 'node:fs'
+import { basename, dirname, extname, join } from 'node:path'
 import { APP_NAME, GITHUB_OWNER, GITHUB_REPO } from '../shared/app'
+import { getUpdateDownloadDir, setUpdateDownloadDir } from './db'
 
 const FEED = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`
 
@@ -101,18 +101,25 @@ async function askToApply(kind: Channel, install: () => void): Promise<void> {
   if (response === 0) install()
 }
 
+function yieldDialogs(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 150))
+}
+
 async function askSavePath(defaultPath: string, extensions: string[]): Promise<string | null> {
-  const options = {
-    title: `Save ${APP_NAME} update`,
+  await yieldDialogs()
+  const options: Electron.SaveDialogOptions = {
+    title: `Choose download location`,
     defaultPath,
-    buttonLabel: 'Save',
+    buttonLabel: 'Download',
     filters: [
       { name: 'Update', extensions },
       { name: 'All files', extensions: ['*'] }
-    ]
+    ],
+    properties: process.platform === 'win32' ? ['dontAddToRecent'] : []
   }
-  const w = currentWindow()
-  const result = w ? await dialog.showSaveDialog(w, options) : await dialog.showSaveDialog(options)
+  // Unparented: a second native dialog attached to the same window after
+  // the Update prompt often never appears on Windows.
+  const result = await dialog.showSaveDialog(options)
   if (result.canceled || !result.filePath) return null
   return result.filePath
 }
@@ -195,110 +202,21 @@ async function downloadFile(url: string, dest: string, size?: number): Promise<v
   }
 }
 
-const PORTABLE_PENDING = '.sieve-editor-update.exe'
-
-function launchPortableExe(exe: string): void {
+function launchFile(exe: string): void {
   spawn(exe, [], { detached: true, stdio: 'ignore', cwd: dirname(exe) }).unref()
 }
 
-function orphanWscript(vbs: string, args: string[]): void {
-  const wscript = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'wscript.exe')
-  const quoted = [wscript, '//B', '//Nologo', vbs, ...args]
-    .map((a) => `"${a.replaceAll('"', '')}"`)
-    .join(' ')
-  spawn(process.env.ComSpec || 'cmd.exe', ['/d', '/c', `start "" ${quoted}`], {
-    detached: true,
-    stdio: 'ignore',
-    windowsHide: true,
-    windowsVerbatimArguments: true
-  }).unref()
+function samePath(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase()
 }
 
-function writeDeleteAfterExitScript(): string {
-  const vbs = join(tmpdir(), 'sieve-editor-del.vbs')
-  writeFileSync(
-    vbs,
-    [
-      'Set wmi = GetObject("winmgmts:\\\\.\\root\\cimv2")',
-      'pid = WScript.Arguments(0)',
-      'target = WScript.Arguments(1)',
-      'Do',
-      '  Set procs = wmi.ExecQuery("SELECT ProcessId FROM Win32_Process WHERE ProcessId=" & pid)',
-      '  If procs.Count = 0 Then Exit Do',
-      '  WScript.Sleep 200',
-      'Loop',
-      'WScript.Sleep 300',
-      'Set fso = CreateObject("Scripting.FileSystemObject")',
-      'On Error Resume Next',
-      'For i = 1 To 20',
-      '  Err.Clear',
-      '  fso.DeleteFile target, True',
-      '  If Err.Number = 0 Then Exit For',
-      '  WScript.Sleep 200',
-      'Next',
-      'fso.DeleteFile WScript.ScriptFullName, True',
-      ''
-    ].join('\r\n')
-  )
-  return vbs
-}
-
-function quitAndReplacePortable(downloaded: string, oldExe: string, nextExe: string): void {
-  const same = oldExe.toLowerCase() === nextExe.toLowerCase()
-  if (!same) {
-    const sameDir = dirname(nextExe).toLowerCase() === dirname(oldExe).toLowerCase()
-    if (sameDir) orphanWscript(writeDeleteAfterExitScript(), [String(process.pid), oldExe])
-    launchPortableExe(nextExe)
-    setTimeout(() => app.exit(0), 200)
-    return
-  }
-  const vbs = join(tmpdir(), 'sieve-editor-update.vbs')
-  writeFileSync(
-    vbs,
-    [
-      'Set wmi = GetObject("winmgmts:\\\\.\\root\\cimv2")',
-      'pid = WScript.Arguments(0)',
-      'downloaded = WScript.Arguments(1)',
-      'nextExe = WScript.Arguments(2)',
-      'Do',
-      '  Set procs = wmi.ExecQuery("SELECT ProcessId FROM Win32_Process WHERE ProcessId=" & pid)',
-      '  If procs.Count = 0 Then Exit Do',
-      '  WScript.Sleep 200',
-      'Loop',
-      'WScript.Sleep 400',
-      'Set fso = CreateObject("Scripting.FileSystemObject")',
-      'Set sh = CreateObject("WScript.Shell")',
-      'On Error Resume Next',
-      'done = False',
-      'For i = 1 To 25',
-      '  Err.Clear',
-      '  fso.CopyFile downloaded, nextExe, True',
-      '  If Err.Number = 0 Then',
-      '    If fso.FileExists(downloaded) Then fso.DeleteFile downloaded, True',
-      '    done = True',
-      '    Exit For',
-      '  End If',
-      '  WScript.Sleep 200',
-      'Next',
-      'If done Then sh.Run """" & nextExe & """", 1, False',
-      'fso.DeleteFile WScript.ScriptFullName, True',
-      ''
-    ].join('\r\n')
-  )
-  orphanWscript(vbs, [String(process.pid), downloaded, nextExe])
-  setTimeout(() => app.exit(0), 200)
-}
-
-export function resumeIncompletePortableUpdate(): boolean {
-  const dir = process.env.PORTABLE_EXECUTABLE_DIR
-  if (!dir) return false
-  const pending = join(dir, PORTABLE_PENDING)
-  if (!existsSync(pending)) return false
-  const self = (process.env.PORTABLE_EXECUTABLE_FILE || portableExePath() || '').toLowerCase()
-  if (self === pending.toLowerCase()) return false
-  launchPortableExe(pending)
-  setTimeout(() => app.exit(0), 200)
-  return true
+function unlockedDest(chosen: string, lockedPath: string | null, assetName: string): string {
+  if (!lockedPath || !samePath(chosen, lockedPath)) return chosen
+  const named = join(dirname(chosen), basename(assetName.replaceAll('\\', '/')))
+  if (!samePath(named, lockedPath)) return named
+  const ext = extname(chosen)
+  const stem = basename(chosen, ext)
+  return join(dirname(chosen), `${stem}-new${ext}`)
 }
 
 function findAsset(
@@ -312,6 +230,8 @@ function findAsset(
 }
 
 function defaultUpdateDir(kind: Channel): string {
+  const saved = getUpdateDownloadDir()
+  if (saved && existsSync(saved)) return saved
   if (kind === 'portable' && process.env.PORTABLE_EXECUTABLE_DIR) {
     return process.env.PORTABLE_EXECUTABLE_DIR
   }
@@ -339,17 +259,15 @@ async function updateFromRelease(release: GithubRelease, kind: Channel): Promise
   const suggested = join(defaultUpdateDir(kind), basename(asset.name.replaceAll('\\', '/')))
   const chosen = await askSavePath(suggested, assetExtensions(kind))
   if (!chosen) return
-  const oldPortable = kind === 'portable' ? portableExePath() : null
-  const runningAppImage = kind === 'appimage' ? process.env.APPIMAGE || null : null
   const locked =
-    (oldPortable && chosen.toLowerCase() === oldPortable.toLowerCase()) ||
-    (runningAppImage && chosen.toLowerCase() === runningAppImage.toLowerCase())
-  const dest = locked
-    ? kind === 'appimage'
-      ? `${chosen}.new`
-      : join(dirname(chosen), PORTABLE_PENDING)
-    : chosen
+    kind === 'portable'
+      ? portableExePath()
+      : kind === 'appimage'
+        ? process.env.APPIMAGE || null
+        : null
+  const dest = unlockedDest(chosen, locked, asset.name)
   try {
+    setUpdateDownloadDir(dirname(dest))
     await downloadFile(asset.browser_download_url, dest, asset.size)
     if (kind === 'appimage') {
       try {
@@ -359,11 +277,7 @@ async function updateFromRelease(release: GithubRelease, kind: Channel): Promise
       }
     }
     await askToApply(kind, () => {
-      if (kind === 'portable' && oldPortable) {
-        quitAndReplacePortable(dest, oldPortable, chosen)
-        return
-      }
-      spawn(dest, [], { detached: true, stdio: 'ignore', cwd: dirname(dest) }).unref()
+      launchFile(dest)
       app.quit()
     })
   } catch (err) {
