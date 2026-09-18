@@ -64,7 +64,7 @@
     const info = await window.api.app.info()
     appName = info.name
     appVersion = info.version
-    document.title = `${info.name} ${info.version}`
+    document.title = info.title
     accounts = await window.api.accounts.list()
     const prefs = await window.api.prefs.get()
     indentWithTabs = prefs.indentWithTabs

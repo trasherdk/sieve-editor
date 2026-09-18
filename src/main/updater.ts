@@ -216,59 +216,63 @@ function portableAssetFileName(assetName: string): string {
 }
 
 function quitAndReplacePortable(downloaded: string, oldExe: string, nextExe: string): void {
-  const ps1 = join(tmpdir(), 'sieve-editor-update.ps1')
+  const vbs = join(tmpdir(), 'sieve-editor-update.vbs')
+  const wscript = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'wscript.exe')
   const same = oldExe.toLowerCase() === nextExe.toLowerCase()
   const script = [
-    'param(',
-    '  [Parameter(Mandatory)][int]$ProcessId,',
-    '  [Parameter(Mandatory)][string]$Downloaded,',
-    '  [Parameter(Mandatory)][string]$OldExe,',
-    '  [Parameter(Mandatory)][string]$NextExe,',
-    '  [Parameter(Mandatory)][string]$Overwrite',
-    ')',
-    'Wait-Process -Id $ProcessId -ErrorAction SilentlyContinue',
-    'Start-Sleep -Milliseconds 400',
-    '$ok = $false',
-    'for ($i = 0; $i -lt 25 -and -not $ok; $i++) {',
-    '  try {',
-    '    if ($Overwrite -eq "1") {',
-    '      Copy-Item -LiteralPath $Downloaded -Destination $NextExe -Force',
-    '      Remove-Item -LiteralPath $Downloaded -Force -ErrorAction SilentlyContinue',
-    '    } else {',
-    '      Move-Item -LiteralPath $Downloaded -Destination $NextExe -Force',
-    '      if (Test-Path -LiteralPath $OldExe) {',
-    '        Remove-Item -LiteralPath $OldExe -Force -ErrorAction SilentlyContinue',
-    '      }',
-    '    }',
-    '    $ok = $true',
-    '  } catch {',
-    '    Start-Sleep -Milliseconds 200',
-    '  }',
-    '}',
-    'if ($ok) { Start-Process -FilePath $NextExe }',
-    'Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue',
+    'Set wmi = GetObject("winmgmts:\\\\.\\root\\cimv2")',
+    'pid = WScript.Arguments(0)',
+    'downloaded = WScript.Arguments(1)',
+    'oldExe = WScript.Arguments(2)',
+    'nextExe = WScript.Arguments(3)',
+    'overwrite = WScript.Arguments(4)',
+    'Do',
+    '  Set procs = wmi.ExecQuery("SELECT ProcessId FROM Win32_Process WHERE ProcessId=" & pid)',
+    '  If procs.Count = 0 Then Exit Do',
+    '  WScript.Sleep 200',
+    'Loop',
+    'WScript.Sleep 400',
+    'Set fso = CreateObject("Scripting.FileSystemObject")',
+    'Set sh = CreateObject("WScript.Shell")',
+    'done = False',
+    'For i = 1 To 25',
+    '  On Error Resume Next',
+    '  Err.Clear',
+    '  If overwrite = "1" Then',
+    '    fso.CopyFile downloaded, nextExe, True',
+    '    If Err.Number = 0 Then',
+    '      If fso.FileExists(downloaded) Then fso.DeleteFile downloaded, True',
+    '      done = True',
+    '      Exit For',
+    '    End If',
+    '  Else',
+    '    If fso.FileExists(nextExe) Then fso.DeleteFile nextExe, True',
+    '    Err.Clear',
+    '    fso.MoveFile downloaded, nextExe',
+    '    If Err.Number = 0 Then',
+    '      If fso.FileExists(oldExe) Then fso.DeleteFile oldExe, True',
+    '      done = True',
+    '      Exit For',
+    '    End If',
+    '  End If',
+    '  WScript.Sleep 200',
+    'Next',
+    'On Error Resume Next',
+    'If done Then sh.Run """" & nextExe & """", 1, False',
+    'fso.DeleteFile WScript.ScriptFullName, True',
     ''
   ].join('\r\n')
-  writeFileSync(ps1, script)
-  spawn(
-    'powershell.exe',
-    [
-      '-NoProfile',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-WindowStyle',
-      'Hidden',
-      '-File',
-      ps1,
-      String(process.pid),
-      downloaded,
-      oldExe,
-      nextExe,
-      same ? '1' : '0'
-    ],
-    { detached: true, stdio: 'ignore', windowsHide: true }
-  ).unref()
-  app.quit()
+  writeFileSync(vbs, script)
+  const quoted = [wscript, '//B', '//Nologo', vbs, String(process.pid), downloaded, oldExe, nextExe, same ? '1' : '0']
+    .map((a) => `"${a.replaceAll('"', '')}"`)
+    .join(' ')
+  spawn(process.env.ComSpec || 'cmd.exe', ['/d', '/c', `start "" /b ${quoted}`], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+    windowsVerbatimArguments: true
+  }).unref()
+  setTimeout(() => app.exit(0), 200)
 }
 
 async function updatePortable(release: GithubRelease): Promise<void> {

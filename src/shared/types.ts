@@ -76,6 +76,8 @@ export type ConnectResult = {
 export type AppInfo = {
   name: string
   version: string
+  title: string
+  portable: boolean
 }
 
 export type FileExportResult = { canceled: true } | { canceled: false; path: string }
