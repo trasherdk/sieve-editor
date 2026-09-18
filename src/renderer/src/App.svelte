@@ -34,7 +34,7 @@
   let checkSeq = 0
   let indentWithTabs = $state(DEFAULT_INDENT_WITH_TABS)
   let tabSize = $state(DEFAULT_TAB_SIZE)
-  let lastInput = $state<AccountInput | null>(null)
+  let lastInput = $state.raw<AccountInput | null>(null)
 
   const dirty = $derived(body !== original)
   const keywords = $derived(capabilities?.sieve ?? [])
@@ -76,12 +76,28 @@
       bodiesNext && Object.keys(bodiesNext).length ? bodiesNext : await loadBodies(scriptsNext)
   }
 
+  function cloneAccount(input: AccountInput): AccountInput {
+    const snap = $state.snapshot(input)
+    const out: AccountInput = {
+      host: snap.host,
+      port: snap.port,
+      username: snap.username,
+      tlsMode: snap.tlsMode,
+      rejectUnauthorized: snap.rejectUnauthorized
+    }
+    if (snap.id != null) out.id = snap.id
+    if (snap.password) out.password = snap.password
+    if (snap.rememberPassword != null) out.rememberPassword = snap.rememberPassword
+    return out
+  }
+
   async function connect(input: AccountInput, resume = false): Promise<void> {
     busy = true
     error = ''
     try {
-      const result: ConnectResult = await window.api.sieve.connect(input)
-      lastInput = { ...input, id: result.account.id }
+      const payload = cloneAccount(input)
+      const result: ConnectResult = await window.api.sieve.connect(payload)
+      lastInput = { ...payload, id: result.account.id }
       account = result.account
       capabilities = result.capabilities
       await applySnapshot(result.scripts, result.bodies)
