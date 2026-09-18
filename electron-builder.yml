@@ -10,6 +10,8 @@ files:
   - '!drizzle.config.ts'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  - '!scripts/*'
+  - '!.github/**'
 extraResources:
   - from: drizzle
     to: drizzle
@@ -17,9 +19,28 @@ asarUnpack:
   - '**/*.node'
 win:
   executableName: Sieve
+  target:
+    - nsis
+    - portable
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+portable:
+  artifactName: ${name}-${version}-portable.${ext}
+linux:
+  category: Network
+  maintainer: fumlersoft
+  target:
+    - AppImage
+    - deb
+appImage:
+  artifactName: ${name}-${version}.${ext}
+deb:
+  artifactName: ${name}-${version}.${ext}
+publish:
+  provider: github
+  owner: trasherdk
+  repo: sieve-editor
 npmRebuild: true

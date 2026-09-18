@@ -80,7 +80,31 @@ Windows installer:
 pnpm.cmd run build:win
 ```
 
-Unpackaged dir only: `pnpm.cmd run build:unpack`.
+Unpackaged dir only: `pnpm.cmd run build:unpack`. Linux locally: `pnpm.cmd run build:linux` (AppImage + .deb).
+
+## Release
+
+Ship from a **clean `develop`** that matches **`origin/develop`**:
+
+```bash
+cd sieve-editor
+pnpm.cmd release
+```
+
+Optional version bump first (`package.json` is currently **0.1.0**):
+
+```bash
+pnpm.cmd release -- --bump patch
+```
+
+The script fails unless the current branch is `develop` and it is synced with GitHub. Then it opens a Release PR to `main`, merges it, tags `vX.Y.Z`, pushes the tag, and GitHub Actions builds unsigned binaries onto that GitHub Release:
+
+| Platform | Installer | Portable |
+| --- | --- | --- |
+| Windows | NSIS `sieve-editor-*-setup.exe` | `sieve-editor-*-portable.exe` |
+| Linux | `.deb` | AppImage |
+
+Linux artifacts are built on Ubuntu runners; they are not tested on a local Linux desktop. macOS is not in this flow (no signing/notarization). `gh` must be logged in (`gh auth login -p ssh`).
 
 UI notes:
 
@@ -92,7 +116,7 @@ UI notes:
 
 ## Out of scope
 
-Graphical block editor, GSSAPI/Kerberos, a browser-facing HTTP proxy, copying sieve-old, Linux/mac packages (easy to add later).
+Graphical block editor, GSSAPI/Kerberos, a browser-facing HTTP proxy, copying sieve-old, macOS packages.
 
 ## Plans
 
