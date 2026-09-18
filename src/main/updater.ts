@@ -216,27 +216,58 @@ function portableAssetFileName(assetName: string): string {
 }
 
 function quitAndReplacePortable(downloaded: string, oldExe: string, nextExe: string): void {
-  const bat = join(tmpdir(), 'sieve-editor-update.bat')
-  const pid = process.pid
+  const ps1 = join(tmpdir(), 'sieve-editor-update.ps1')
   const same = oldExe.toLowerCase() === nextExe.toLowerCase()
-  const replace = same
-    ? [`copy /Y "${downloaded}" "${nextExe}"`, `del "${downloaded}"`]
-    : [`move /Y "${downloaded}" "${nextExe}"`, `if exist "${oldExe}" del "${oldExe}"`]
   const script = [
-    '@echo off',
-    ':wait',
-    `tasklist /FI "PID eq ${pid}" | find "${pid}" >nul`,
-    'if not errorlevel 1 (',
-    '  timeout /t 1 /nobreak >nul',
-    '  goto wait',
+    'param(',
+    '  [Parameter(Mandatory)][int]$ProcessId,',
+    '  [Parameter(Mandatory)][string]$Downloaded,',
+    '  [Parameter(Mandatory)][string]$OldExe,',
+    '  [Parameter(Mandatory)][string]$NextExe,',
+    '  [Parameter(Mandatory)][string]$Overwrite',
     ')',
-    ...replace,
-    `start "" "${nextExe}"`,
-    'del "%~f0"',
+    'Wait-Process -Id $ProcessId -ErrorAction SilentlyContinue',
+    'Start-Sleep -Milliseconds 400',
+    '$ok = $false',
+    'for ($i = 0; $i -lt 25 -and -not $ok; $i++) {',
+    '  try {',
+    '    if ($Overwrite -eq "1") {',
+    '      Copy-Item -LiteralPath $Downloaded -Destination $NextExe -Force',
+    '      Remove-Item -LiteralPath $Downloaded -Force -ErrorAction SilentlyContinue',
+    '    } else {',
+    '      Move-Item -LiteralPath $Downloaded -Destination $NextExe -Force',
+    '      if (Test-Path -LiteralPath $OldExe) {',
+    '        Remove-Item -LiteralPath $OldExe -Force -ErrorAction SilentlyContinue',
+    '      }',
+    '    }',
+    '    $ok = $true',
+    '  } catch {',
+    '    Start-Sleep -Milliseconds 200',
+    '  }',
+    '}',
+    'if ($ok) { Start-Process -FilePath $NextExe }',
+    'Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue',
     ''
   ].join('\r\n')
-  writeFileSync(bat, script)
-  spawn('cmd.exe', ['/c', bat], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
+  writeFileSync(ps1, script)
+  spawn(
+    'powershell.exe',
+    [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-WindowStyle',
+      'Hidden',
+      '-File',
+      ps1,
+      String(process.pid),
+      downloaded,
+      oldExe,
+      nextExe,
+      same ? '1' : '0'
+    ],
+    { detached: true, stdio: 'ignore', windowsHide: true }
+  ).unref()
   app.quit()
 }
 
