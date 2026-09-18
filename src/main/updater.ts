@@ -4,7 +4,7 @@ import electronUpdater from 'electron-updater'
 import { spawn } from 'node:child_process'
 import { createWriteStream, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { APP_NAME, GITHUB_OWNER, GITHUB_REPO } from '../shared/app'
 
 const FEED = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`
@@ -209,9 +209,19 @@ async function downloadFile(url: string, dest: string, size?: number): Promise<v
   }
 }
 
-function quitAndReplacePortable(downloaded: string, target: string): void {
+function portableAssetFileName(assetName: string): string {
+  const base = basename(assetName.replaceAll('\\', '/'))
+  if (!/^[A-Za-z0-9._-]+\.exe$/i.test(base)) return ''
+  return base
+}
+
+function quitAndReplacePortable(downloaded: string, oldExe: string, nextExe: string): void {
   const bat = join(tmpdir(), 'sieve-editor-update.bat')
   const pid = process.pid
+  const same = oldExe.toLowerCase() === nextExe.toLowerCase()
+  const replace = same
+    ? [`copy /Y "${downloaded}" "${nextExe}"`, `del "${downloaded}"`]
+    : [`move /Y "${downloaded}" "${nextExe}"`, `if exist "${oldExe}" del "${oldExe}"`]
   const script = [
     '@echo off',
     ':wait',
@@ -220,9 +230,8 @@ function quitAndReplacePortable(downloaded: string, target: string): void {
     '  timeout /t 1 /nobreak >nul',
     '  goto wait',
     ')',
-    `copy /Y "${downloaded}" "${target}"`,
-    `start "" "${target}"`,
-    `del "${downloaded}"`,
+    ...replace,
+    `start "" "${nextExe}"`,
     'del "%~f0"',
     ''
   ].join('\r\n')
@@ -234,9 +243,10 @@ function quitAndReplacePortable(downloaded: string, target: string): void {
 async function updatePortable(release: GithubRelease): Promise<void> {
   const version = tagVersion(release.tag_name)
   const asset = release.assets.find((a) => /portable\.exe$/i.test(a.name))
-  const target = portableExePath()
+  const oldExe = portableExePath()
   const dir = process.env.PORTABLE_EXECUTABLE_DIR
-  if (!asset || !target || !dir) {
+  const nextName = asset ? portableAssetFileName(asset.name) : ''
+  if (!asset || !oldExe || !dir || !nextName) {
     await openReleasePage(
       release.html_url,
       version,
@@ -246,9 +256,10 @@ async function updatePortable(release: GithubRelease): Promise<void> {
   }
   if (!(await askToUpdate(version))) return
   const dest = join(dir, '.sieve-editor-update.exe')
+  const nextExe = join(dir, nextName)
   try {
     await downloadFile(asset.browser_download_url, dest, asset.size)
-    await askToRestart(() => quitAndReplacePortable(dest, target))
+    await askToRestart(() => quitAndReplacePortable(dest, oldExe, nextExe))
   } catch (err) {
     await showUpdateError(err, 'The update could not be downloaded.')
   }
