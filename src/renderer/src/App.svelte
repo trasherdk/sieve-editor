@@ -16,6 +16,7 @@
     SieveScript
   } from '@shared/types'
   import { DEFAULT_INDENT_WITH_TABS, DEFAULT_TAB_SIZE, sanitizeScriptName } from '@shared/types'
+  import { formatSieve } from '@shared/format'
   import { APP_NAME } from '@shared/app'
   import icon from './assets/icon.png'
 
@@ -24,6 +25,7 @@
 
   let accounts = $state<AccountRecord[]>([])
   let busy = $state(false)
+  let saving = $state(false)
   let error = $state('')
   let connected = $state(false)
   let account = $state<AccountRecord | null>(null)
@@ -239,6 +241,17 @@
     scheduleCheck(body)
   }
 
+  function format(): void {
+    actionsMenu = false
+    const next = formatSieve(body, { indentWithTabs, tabSize })
+    if (next === body) {
+      status = 'Already formatted'
+      return
+    }
+    scheduleCheck(next)
+    status = indentWithTabs ? `Formatted with tabs (width ${tabSize})` : `Formatted with ${tabSize} spaces`
+  }
+
   async function refreshList(): Promise<void> {
     try {
       const snap = await window.api.sieve.snapshot()
@@ -258,6 +271,7 @@
       if (!confirm(`Script “${name}” already exists. Replace it on the server?`)) return false
     }
     busy = true
+    saving = true
     error = ''
     try {
       await window.api.sieve.put(name, body)
@@ -272,6 +286,7 @@
       if (!lost(err)) error = err instanceof Error ? err.message : String(err)
       return false
     } finally {
+      saving = false
       busy = false
     }
   }
@@ -505,7 +520,19 @@
   }
 
   onMount(() => {
-    return window.api.sieve.onDisconnected((reason) => markDisconnected(reason))
+    const off = window.api.sieve.onDisconnected((reason) => markDisconnected(reason))
+    const onKey = (e: KeyboardEvent): void => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.repeat) return
+      if (e.key.toLowerCase() !== 's') return
+      e.preventDefault()
+      if (!account || !connected || busy || naming) return
+      void save()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => {
+      off()
+      window.removeEventListener('keydown', onKey, true)
+    }
   })
 
   void loadAccounts()
@@ -557,7 +584,7 @@
         title="Script name"
       />
       <button class="rounded bg-accent px-3 py-1 text-sm text-ink disabled:opacity-50" onclick={() => void save()} disabled={busy || !connected}>
-        Save
+        {saving ? 'Saving…' : 'Save'}
       </button>
       <div class="relative">
         <button
@@ -587,6 +614,14 @@
               onclick={newScript}
             >
               New
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              class="block w-full px-3 py-1.5 text-left text-sm hover:bg-ink"
+              onclick={format}
+            >
+              Format
             </button>
             <button
               type="button"

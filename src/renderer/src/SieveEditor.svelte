@@ -107,7 +107,13 @@
           lintConf.of(lintExt(diagnostics)),
           indentConf.of(indentExt(indentWithTabs, tabSize)),
           oneDark,
-          keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
+          keymap.of([
+            { key: 'Mod-s', preventDefault: true, run: () => true },
+            ...defaultKeymap,
+            ...historyKeymap,
+            ...searchKeymap,
+            indentWithTab
+          ]),
           EditorView.updateListener.of((update) => {
             if (applying) return
             if (update.docChanged) onchange(update.state.doc.toString())
