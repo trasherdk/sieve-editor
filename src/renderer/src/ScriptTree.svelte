@@ -1,12 +1,17 @@
 <script lang="ts">
   import type { ScriptTreeKind, ScriptTreeRow } from '@shared/includes'
 
-  let { rows, unused, currentName, onopen } = $props<{
+  let {
+    rows,
+    unused,
+    currentName,
+    onopen
+  }: {
     rows: ScriptTreeRow[]
     unused: string[]
     currentName: string | null
     onopen: (name: string) => void
-  }>()
+  } = $props()
 
   function kindLabel(kind: ScriptTreeKind): string | null {
     if (kind === 'active') return 'active'
