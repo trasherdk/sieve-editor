@@ -14,7 +14,8 @@
     appVersion,
     onconnect,
     onremove,
-    oncheckupdates
+    oncheckupdates,
+    onsettings
   }: {
     accounts: AccountRecord[]
     busy: boolean
@@ -25,6 +26,7 @@
     onconnect: (input: AccountInput) => void
     onremove: (id: number) => void
     oncheckupdates: () => void
+    onsettings: () => void
   } = $props()
 
   let host = $state(DEFAULT_HOST)
@@ -104,7 +106,7 @@
   }
 </script>
 
-<div class="flex min-h-full items-center justify-center p-8">
+<div class="flex h-full items-center justify-center p-8">
   <form
     class="w-full max-w-lg rounded-xl border border-line bg-panel p-6 shadow-xl"
     onsubmit={submit}
@@ -129,13 +131,22 @@
 
     <div class="mb-4 flex items-center justify-between">
       <p class="text-xs uppercase tracking-wide text-zinc-400">Accounts</p>
-      <button
-        type="button"
-        class="rounded border border-line px-2 py-1 text-xs hover:border-accent"
-        onclick={addNew}
-      >
-        Add account
-      </button>
+      <span class="flex gap-2">
+        <button
+          type="button"
+          class="rounded border border-line px-2 py-1 text-xs hover:border-accent"
+          onclick={onsettings}
+        >
+          Settings
+        </button>
+        <button
+          type="button"
+          class="rounded border border-line px-2 py-1 text-xs hover:border-accent"
+          onclick={addNew}
+        >
+          Add account
+        </button>
+      </span>
     </div>
 
     {#if accounts.length}

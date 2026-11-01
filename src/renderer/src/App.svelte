@@ -6,7 +6,9 @@
   import ScriptTabs from './ScriptTabs.svelte'
   import NamePrompt from './NamePrompt.svelte'
   import DirtyClosePrompt from './DirtyClosePrompt.svelte'
-  import { buildScriptGraph, findSyntaxIssues, flattenTree } from '@shared/includes'
+  import SettingsDialog from './SettingsDialog.svelte'
+  import { buildScriptGraph, flattenTree } from '@shared/includes'
+  import { findSyntaxIssues } from '@shared/sieveSyntax'
   import type {
     AccountInput,
     AccountRecord,
@@ -15,7 +17,8 @@
     ConnectResult,
     EditorPrefs,
     ScriptBodies,
-    SieveScript
+    SieveScript,
+    UpdateChannel
   } from '@shared/types'
   import { DEFAULT_INDENT_WITH_TABS, DEFAULT_TAB_SIZE, sanitizeScriptName } from '@shared/types'
   import { formatSieve } from '@shared/format'
@@ -35,6 +38,9 @@
 
   let appName = $state(APP_NAME)
   let appVersion = $state('')
+  let versionLabel = $state('')
+  let updateChannel = $state<UpdateChannel>('stable')
+  let settingsOpen = $state(false)
 
   let accounts = $state<AccountRecord[]>([])
   let busy = $state(false)
@@ -119,7 +125,7 @@
       draftName: name,
       body: bodies[name] ?? '',
       original: bodies[name] ?? '',
-      diagnostics: []
+      diagnostics: localIssues(bodies[name] ?? '')
     }))
     const preferred =
       (acc.openTabs?.active && names.includes(acc.openTabs.active) && acc.openTabs.active) ||
@@ -134,17 +140,20 @@
     const info = await window.api.app.info()
     appName = info.name
     appVersion = info.version
+    versionLabel = info.versionLabel
     document.title = info.title
     accounts = await window.api.accounts.list()
     const prefs = await window.api.prefs.get()
     indentWithTabs = prefs.indentWithTabs
     tabSize = prefs.tabSize
+    updateChannel = prefs.updateChannel
   }
 
-  async function savePrefs(next: EditorPrefs): Promise<void> {
+  async function savePrefs(next: Partial<EditorPrefs>): Promise<void> {
     const saved = await window.api.prefs.save(next)
     indentWithTabs = saved.indentWithTabs
     tabSize = saved.tabSize
+    updateChannel = saved.updateChannel
   }
 
   async function loadBodies(list: SieveScript[]): Promise<ScriptBodies> {
@@ -270,6 +279,8 @@
     activeId = id
     status = ''
     persistOpenTabs()
+    const live = currentTab()
+    if (live) scheduleCheck(live.body)
   }
 
   function dropTab(id: string): void {
@@ -320,11 +331,20 @@
     return out
   }
 
+  function diagLabel(item: CheckDiagnostic | undefined): string {
+    if (!item) return 'Ready'
+    return item.syntax ? `${item.message} — ${item.syntax}` : item.message
+  }
+
+  function localIssues(source: string): CheckDiagnostic[] {
+    return findSyntaxIssues(source, { capabilities: capabilities ? [...capabilities.sieve] : null })
+  }
+
   function scheduleCheck(next: string): void {
     const t = currentTab()
     if (!t) return
     t.body = next
-    const local = findSyntaxIssues(next)
+    const local = localIssues(next)
     t.diagnostics = local
     const seq = ++checkSeq
     const tabId = t.id
@@ -725,7 +745,7 @@
       if (!(e.ctrlKey || e.metaKey) || e.altKey || e.repeat) return
       if (e.key.toLowerCase() !== 's') return
       e.preventDefault()
-      if (!account || !connected || busy || naming || dirtyCloseId || disconnectAsk || !tab) return
+      if (!account || !connected || busy || naming || dirtyCloseId || disconnectAsk || settingsOpen || !tab) return
       void save()
     }
     window.addEventListener('keydown', onKey, true)
@@ -738,20 +758,24 @@
   void loadAccounts()
 </script>
 
+<div class="flex h-full min-h-0 flex-col">
 {#if !account}
-  <Login
-    {accounts}
-    {busy}
-    {error}
-    {appName}
-    {appVersion}
-    preferredId={lastInput?.id ?? null}
-    onconnect={connect}
-    onremove={removeSavedAccount}
-    oncheckupdates={() => void window.api.app.checkForUpdates()}
-  />
+  <div class="min-h-0 flex-1">
+    <Login
+      {accounts}
+      {busy}
+      {error}
+      {appName}
+      {appVersion}
+      preferredId={lastInput?.id ?? null}
+      onconnect={connect}
+      onremove={removeSavedAccount}
+      oncheckupdates={() => void window.api.app.checkForUpdates()}
+      onsettings={() => (settingsOpen = true)}
+    />
+  </div>
 {:else}
-  <div class="flex h-full min-h-0 flex-col">
+  <div class="flex min-h-0 min-w-0 flex-1 flex-col">
     <header class="flex items-center gap-3 border-b border-line bg-panel px-3 py-2">
       <img src={icon} alt="" class="size-8 shrink-0 rounded-lg" />
       <div class="min-w-0 flex-1 text-sm">
@@ -788,6 +812,16 @@
           if (t) t.draftName = (e.currentTarget as HTMLInputElement).value
         }}
       />
+      <button
+        class="rounded border border-line px-3 py-1 text-sm"
+        type="button"
+        onclick={() => {
+          actionsMenu = false
+          settingsOpen = true
+        }}
+      >
+        Settings
+      </button>
       <button class="rounded bg-accent px-3 py-1 text-sm text-ink disabled:opacity-50" onclick={() => void save()} disabled={busy || !connected || !tab}>
         {saving ? 'Saving…' : 'Save'}
       </button>
@@ -959,15 +993,30 @@
       </main>
     </div>
 
-    <footer class="border-t border-line bg-panel px-3 py-1 text-xs text-zinc-400">
-      {#if error}
-        <span class="text-red-300">{error}</span>
-      {:else}
-        {status || (tab?.diagnostics[0]?.message ?? 'Ready')}
-      {/if}
-    </footer>
   </div>
 {/if}
+  <footer class="flex min-w-0 items-center justify-between gap-3 border-t border-line bg-panel px-3 py-1 text-xs text-zinc-400">
+    <span class="min-w-0 flex-1 truncate">
+      {#if account}
+        {#if error}
+          <span class="text-red-300">{error}</span>
+        {:else}
+          {status || diagLabel(tab?.diagnostics[0])}
+        {/if}
+      {/if}
+    </span>
+    {#if versionLabel}
+      <button
+        type="button"
+        class="shrink-0 font-mono text-zinc-300 hover:text-zinc-100"
+        title="Check for updates"
+        onclick={() => void window.api.app.checkForUpdates()}
+      >
+        {versionLabel}
+      </button>
+    {/if}
+  </footer>
+</div>
 
 {#if dirtyCloseId}
   {@const closing = tabs.find((t) => t.id === dirtyCloseId)}
@@ -990,6 +1039,25 @@
       void finishDisconnect()
     }}
     oncancel={() => (disconnectAsk = false)}
+  />
+{/if}
+
+{#if settingsOpen}
+  <SettingsDialog
+    channel={updateChannel}
+    {busy}
+    onCancel={() => (settingsOpen = false)}
+    onSave={(channel) => {
+      void savePrefs({ updateChannel: channel }).then(() => {
+        settingsOpen = false
+      })
+    }}
+    onCheck={(channel) => {
+      void savePrefs({ updateChannel: channel }).then(async () => {
+        settingsOpen = false
+        await window.api.app.checkForUpdates()
+      })
+    }}
   />
 {/if}
 

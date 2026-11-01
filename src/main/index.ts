@@ -28,6 +28,13 @@ function isPortable(): boolean {
   return Boolean(process.env.PORTABLE_EXECUTABLE_DIR)
 }
 
+function versionLabel(): string {
+  const version = app.getVersion()
+  if (!app.isPackaged) return `${version} dev`
+  if (isPortable()) return `${version} portable`
+  return version
+}
+
 function appTitle(): string {
   const version = app.getVersion()
   return isPortable() ? `${APP_NAME} ${version} Portable` : `${APP_NAME} ${version}`
@@ -174,6 +181,7 @@ function registerIpc(): void {
   ipcMain.handle('app:info', () => ({
     name: APP_NAME,
     version: app.getVersion(),
+    versionLabel: versionLabel(),
     title: appTitle(),
     portable: isPortable()
   }))
@@ -262,7 +270,7 @@ function registerIpc(): void {
 
   ipcMain.handle('prefs:get', () => wrapIpc(() => getEditorPrefs()))
 
-  ipcMain.handle('prefs:save', (_e, prefs: EditorPrefs) => wrapIpc(() => saveEditorPrefs(prefs)))
+  ipcMain.handle('prefs:save', (_e, prefs: Partial<EditorPrefs>) => wrapIpc(() => saveEditorPrefs(prefs)))
 }
 
 app.whenReady().then(() => {

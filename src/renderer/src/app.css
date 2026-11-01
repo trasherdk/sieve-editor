@@ -37,6 +37,13 @@ body {
   font-family: var(--font-mono);
 }
 
+.cm-tooltip-lint .sieve-syntax {
+  display: block;
+  margin-top: 0.25rem;
+  font-family: var(--font-mono);
+  opacity: 0.9;
+}
+
 /* Tailwind Preflight sets `border: 0 solid` on every element; CodeMirror's caret is a left border. */
 .cm-editor .cm-cursor,
 .cm-editor .cm-cursor-primary,

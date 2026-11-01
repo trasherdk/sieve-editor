@@ -9,9 +9,18 @@ export function sanitizeScriptName(raw: string): string {
   return raw.trim().replace(/[\r\n\0]/g, '').slice(0, MAX_SCRIPT_NAME)
 }
 
+export type UpdateChannel = 'off' | 'stable' | 'beta' | 'rc'
+
+export function normalizeUpdateChannel(value: unknown): UpdateChannel {
+  if (value === 'prerelease') return 'beta'
+  if (value === 'off' || value === 'stable' || value === 'beta' || value === 'rc') return value
+  return 'stable'
+}
+
 export type EditorPrefs = {
   indentWithTabs: boolean
   tabSize: number
+  updateChannel: UpdateChannel
 }
 
 export type TlsMode = 'starttls' | 'optional' | 'plaintext'
@@ -54,6 +63,8 @@ export type CheckDiagnostic = {
   line: number | null
   message: string
   severity: 'error' | 'warning'
+  /** Short form of the construct that failed, shown under the message. */
+  syntax?: string
 }
 
 export type Capabilities = {
@@ -82,6 +93,7 @@ export type ConnectResult = {
 export type AppInfo = {
   name: string
   version: string
+  versionLabel: string
   title: string
   portable: boolean
 }
@@ -122,6 +134,6 @@ export type SieveApi = {
   }
   prefs: {
     get: () => Promise<EditorPrefs>
-    save: (prefs: EditorPrefs) => Promise<EditorPrefs>
+    save: (prefs: Partial<EditorPrefs>) => Promise<EditorPrefs>
   }
 }

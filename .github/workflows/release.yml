@@ -31,6 +31,7 @@ jobs:
       - name: Build and publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EP_PRE_RELEASE: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
         run: |
           pnpm run build
           pnpm exec electron-builder --${{ matrix.target }} --publish always
@@ -57,4 +58,8 @@ jobs:
             exit 1
           fi
           node scripts/changelog.mjs "$TAG" "$TAG" > notes.md
-          gh release edit "$TAG" --title "Sieve Editor $TAG" --notes-file notes.md --draft=false
+          if [[ "$TAG" =~ -(beta|rc)\.[0-9]+$ ]]; then
+            gh release edit "$TAG" --title "Sieve Editor $TAG" --notes-file notes.md --draft=false --prerelease --latest=false
+          else
+            gh release edit "$TAG" --title "Sieve Editor $TAG" --notes-file notes.md --draft=false
+          fi

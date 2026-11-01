@@ -4,12 +4,17 @@ function git(args) {
   return execFileSync('git', args, { encoding: 'utf8' }).trim()
 }
 
+function isPrereleaseTag(tag) {
+  return /-(beta|rc)\.\d+$/.test(tag)
+}
+
 export function previousReleaseTag(current = '') {
   const tags = git(['tag', '-l', 'v*', '--sort=-v:refname'])
     .split('\n')
     .map((t) => t.trim())
     .filter(Boolean)
-  return tags.find((t) => t !== current) || ''
+  const stableOnly = current !== '' && !isPrereleaseTag(current)
+  return tags.find((t) => t !== current && (!stableOnly || !isPrereleaseTag(t))) || ''
 }
 
 export function buildReleaseNotes(tag = '', toRef = 'HEAD') {
