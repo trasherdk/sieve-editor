@@ -146,8 +146,14 @@ has('unknown tag', 'keep :copy;', 'Unknown tagged argument ":copy"')
 has('tag after arg', 'require "fileinto";\nfileinto "INBOX" :create;', 'must come before')
 has('unclosed block', 'if true { keep;', 'Missing "}"')
 has('importance', 'require "enotify";\nnotify :importance "9" "mailto:a@b.c";', 'Importance must be')
-has('empty test list', 'if allof () { keep; }', 'Expected a test')
-has('missing test comma', 'if anyof (true false) { keep; }', 'Missing comma in test list')
+has('empty test list', 'if allof () { keep; }', 'Expected a test in "allof"')
+has('missing test comma', 'if anyof (true false) { keep; }', 'Missing comma in "anyof"')
+const allof = findSyntaxIssues('if allof true { keep; }')
+const allofHit = allof.find((d) => d.message.includes('allof'))
+if (!allofHit || allofHit.syntax !== 'allof (test [, test]...)' || !allofHit.message.includes('Expected "(" after "allof"')) {
+  failed++
+  console.error(`FAIL allof syntax ${JSON.stringify(allof)}`)
+}
 
 const lines = findSyntaxIssues('keep;\nfileinto;\n')
 const fileinto = lines.find((d) => d.message.includes('fileinto'))

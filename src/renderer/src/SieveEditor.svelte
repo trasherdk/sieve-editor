@@ -62,12 +62,25 @@
       let from = 0
       for (let i = 1; i < lineNo && i <= lines.length; i++) from += lines[i - 1].length + 1
       const line = lines[lineNo - 1] ?? ''
-      return {
+      const diagnostic: Diagnostic = {
         from,
         to: from + Math.max(line.length, 1),
         severity: item.severity,
         message: item.message
       }
+      if (item.syntax) {
+        const syntax = item.syntax
+        diagnostic.renderMessage = () => {
+          const wrap = document.createElement('span')
+          wrap.textContent = item.message
+          const hint = document.createElement('span')
+          hint.className = 'sieve-syntax'
+          hint.textContent = syntax
+          wrap.append(hint)
+          return wrap
+        }
+      }
+      return diagnostic
     })
   }
 

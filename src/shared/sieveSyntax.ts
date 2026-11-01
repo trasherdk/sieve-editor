@@ -520,12 +520,12 @@ const TESTS = tests()
 export function findSyntaxIssues(source: string, options?: SyntaxCheckOptions): CheckDiagnostic[] {
   const issues: CheckDiagnostic[] = []
   const seen = new Set<string>()
-  const add = (line: number, message: string): void => {
+  const add = (line: number, message: string, syntax?: string): void => {
     if (issues.length >= MAX_ISSUES) return
     const key = `${line}\0${message}`
     if (seen.has(key)) return
     seen.add(key)
-    issues.push({ line, message, severity: 'error' })
+    issues.push(syntax ? { line, message, severity: 'error', syntax } : { line, message, severity: 'error' })
   }
 
   const tokens = tokenize(source, add)
@@ -683,7 +683,7 @@ function showChar(c: string): string {
 
 function parse(
   tokens: Tok[],
-  addLine: (line: number, message: string) => void,
+  addLine: (line: number, message: string, syntax?: string) => void,
   capabilities: readonly string[] | null
 ): void {
   let p = 0
@@ -692,7 +692,7 @@ function parse(
   const server = capabilities ? new Set(capabilities.map((c) => c.toLowerCase())) : null
   const eof = tokens[tokens.length - 1]
 
-  const add = (tok: Tok, message: string): void => addLine(tok.line, message)
+  const add = (tok: Tok, message: string, syntax?: string): void => addLine(tok.line, message, syntax)
   const peek = (n = 0): Tok => tokens[p + n] ?? eof
   const bump = (): Tok => {
     const t = peek()
@@ -1003,7 +1003,7 @@ function parse(
     }
     bump()
     const name = t.text.toLowerCase()
-    if (name === 'allof' || name === 'anyof') return parseTestList()
+    if (name === 'allof' || name === 'anyof') return parseTestList(t)
     if (name === 'true' || name === 'false') return true
     const spec = TESTS.get(name)
     if (!spec) {
@@ -1016,14 +1016,16 @@ function parse(
     return parseArguments(spec, t)
   }
 
-  function parseTestList(): boolean {
+  function parseTestList(word: Tok): boolean {
+    const name = word.text
+    const syntax = `${name.toLowerCase()} (test [, test]...)`
     if (!punct('(')) {
-      add(peek(), 'Expected "("')
+      add(word, `Expected "(" after "${name}"`, syntax)
       return false
     }
     bump()
     if (punct(')')) {
-      add(peek(), 'Expected a test')
+      add(word, `Expected a test in "${name}"`, syntax)
       bump()
       return true
     }
@@ -1034,13 +1036,13 @@ function parse(
         return true
       }
       if (punct('{') || punct('}')) {
-        add(peek(), 'Missing ")"')
+        add(word, `Missing ")" for "${name}"`, syntax)
         return false
       }
       if (punct(',')) {
         bump()
         if (punct(')')) {
-          add(peek(), 'Trailing comma in test list')
+          add(word, `Trailing comma in "${name}"`, syntax)
           bump()
           return true
         }
@@ -1048,14 +1050,14 @@ function parse(
         continue
       }
       if (peek().kind === 'ident') {
-        add(peek(), 'Missing comma in test list')
+        add(peek(), `Missing comma in "${name}"`, syntax)
         if (!parseTest()) recover('test')
         continue
       }
-      add(peek(), `Unexpected ${describe(peek())}`)
+      add(peek(), `Unexpected ${describe(peek())} in "${name}"`, syntax)
       return false
     }
-    add(peek(), 'Missing ")"')
+    add(word, `Missing ")" for "${name}"`, syntax)
     return false
   }
 

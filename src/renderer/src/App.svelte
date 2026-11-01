@@ -323,6 +323,11 @@
     return out
   }
 
+  function diagLabel(item: CheckDiagnostic | undefined): string {
+    if (!item) return 'Ready'
+    return item.syntax ? `${item.message} — ${item.syntax}` : item.message
+  }
+
   function localIssues(source: string): CheckDiagnostic[] {
     return findSyntaxIssues(source, { capabilities: capabilities ? [...capabilities.sieve] : null })
   }
@@ -970,7 +975,7 @@
       {#if error}
         <span class="text-red-300">{error}</span>
       {:else}
-        {status || (tab?.diagnostics[0]?.message ?? 'Ready')}
+        {status || diagLabel(tab?.diagnostics[0])}
       {/if}
     </footer>
   </div>

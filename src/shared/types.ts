@@ -54,6 +54,8 @@ export type CheckDiagnostic = {
   line: number | null
   message: string
   severity: 'error' | 'warning'
+  /** Short form of the construct that failed, shown under the message. */
+  syntax?: string
 }
 
 export type Capabilities = {
