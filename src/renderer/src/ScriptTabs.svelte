@@ -6,11 +6,15 @@
     active: boolean
   }
 
-  let { tabs, onselect, onclose } = $props<{
+  let {
+    tabs,
+    onselect,
+    onclose
+  }: {
     tabs: ScriptTabInfo[]
     onselect: (id: string) => void
     onclose: (id: string) => void
-  }>()
+  } = $props()
 </script>
 
 <div class="flex min-h-9 shrink-0 gap-0.5 overflow-x-auto border-b border-line bg-ink px-1.5 pt-1" role="tablist">
