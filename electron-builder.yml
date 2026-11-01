@@ -50,4 +50,6 @@ publish:
   owner: trasherdk
   repo: sieve-editor
   releaseType: release
-npmRebuild: true
+# 13.x ships an N-API prebuild. Rebuilding it calls node-gyp, which does not
+# recognize Visual Studio 18 on windows-latest.
+npmRebuild: false

@@ -16,7 +16,7 @@
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "svelte-check": "svelte-check --tsconfig ./tsconfig.web.json",
     "typecheck": "npm run typecheck:node && npm run svelte-check",
-    "postinstall": "node ./node_modules/electron/install.js && electron-builder install-app-deps",
+    "postinstall": "node ./node_modules/electron/install.js",
     "db:generate": "drizzle-kit generate",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win",
