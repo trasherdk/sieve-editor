@@ -6,7 +6,8 @@
   import ScriptTabs from './ScriptTabs.svelte'
   import NamePrompt from './NamePrompt.svelte'
   import DirtyClosePrompt from './DirtyClosePrompt.svelte'
-  import { buildScriptGraph, findSyntaxIssues, flattenTree } from '@shared/includes'
+  import { buildScriptGraph, flattenTree } from '@shared/includes'
+  import { findSyntaxIssues } from '@shared/sieveSyntax'
   import type {
     AccountInput,
     AccountRecord,
@@ -119,7 +120,7 @@
       draftName: name,
       body: bodies[name] ?? '',
       original: bodies[name] ?? '',
-      diagnostics: []
+      diagnostics: localIssues(bodies[name] ?? '')
     }))
     const preferred =
       (acc.openTabs?.active && names.includes(acc.openTabs.active) && acc.openTabs.active) ||
@@ -270,6 +271,8 @@
     activeId = id
     status = ''
     persistOpenTabs()
+    const live = currentTab()
+    if (live) scheduleCheck(live.body)
   }
 
   function dropTab(id: string): void {
@@ -320,11 +323,15 @@
     return out
   }
 
+  function localIssues(source: string): CheckDiagnostic[] {
+    return findSyntaxIssues(source, { capabilities: capabilities ? [...capabilities.sieve] : null })
+  }
+
   function scheduleCheck(next: string): void {
     const t = currentTab()
     if (!t) return
     t.body = next
-    const local = findSyntaxIssues(next)
+    const local = localIssues(next)
     t.diagnostics = local
     const seq = ++checkSeq
     const tabId = t.id

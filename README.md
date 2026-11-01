@@ -97,7 +97,7 @@ UI notes:
 
 - Script list: **include tree** from the active script (RFC 6609); unused scripts below
 - CodeMirror 6 + `@codemirror/legacy-modes` sieve mode; keywords from CAPABILITY `SIEVE`
-- Debounced server syntax check (~500ms): `CHECKSCRIPT` when advertised, otherwise PUTSCRIPT/DELETESCRIPT (RFC 5804 fallback). Local checks: unclosed strings, unmatched `[]` `()` `{}`, missing `,` in lists, missing `;` after commands.
+- Debounced syntax check (~500ms). A local Sieve grammar check (commands, tests, `require`, tags, and arguments for RFC 5228 and the extensions Cyrus accepts) runs immediately. When connected, `CHECKSCRIPT` (or PUTSCRIPT/DELETESCRIPT if the server has no CHECKSCRIPT) is merged in after the pause.
 - Multiple servers/accounts: saved list on connect; **Disconnect** returns there. Socket drop stays in the editor with **Connect**.
 - Save limit **50K** (`sieve_maxscriptsize`)
 - Editor **tabs** above the buffer: open several scripts at once (tree click, New, Duplicate, Import). Unsaved tabs show a dot; × or middle-click closes with **Save** / **Discard**. Switching tabs keeps each buffer. Named tabs are restored on the next connect.
