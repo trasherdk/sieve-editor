@@ -4,15 +4,19 @@ import { spawn } from 'node:child_process'
 import { chmodSync, createWriteStream, existsSync, readdirSync } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 import { APP_NAME, GITHUB_OWNER, GITHUB_REPO } from '../shared/app'
-import { getUpdateDownloadDir, setUpdateDownloadDir } from './db'
+import type { UpdateChannel } from '../shared/types'
+import { getUpdateChannel, getUpdateDownloadDir, setUpdateDownloadDir } from './db'
 
-const FEED = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`
+const REPO = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}`
+const FEED = `${REPO}/releases/latest`
+const RELEASES = `${REPO}/releases?per_page=30`
 
 type Channel = 'nsis' | 'appimage' | 'portable' | 'page'
 
 type GithubRelease = {
   tag_name: string
   html_url: string
+  draft?: boolean
   assets: { name: string; browser_download_url: string; size: number }[]
 }
 
@@ -38,38 +42,97 @@ function channel(): Channel {
   return 'page'
 }
 
-function parseVersion(v: string): number[] {
-  return v
-    .replace(/^v/i, '')
-    .split('.')
-    .map((n) => Number.parseInt(n, 10) || 0)
+type SemVer = { core: [number, number, number]; pre: Array<string | number> | null }
+
+function parseSemver(value: string): SemVer {
+  const raw = value.replace(/^v/i, '')
+  const dash = raw.indexOf('-')
+  const corePart = dash === -1 ? raw : raw.slice(0, dash)
+  const prePart = dash === -1 ? '' : raw.slice(dash + 1)
+  const nums = corePart.split('.').map((part) => Number.parseInt(part, 10) || 0)
+  const pre = prePart
+    ? prePart.split('.').map((id) => (/^\d+$/.test(id) ? Number(id) : id))
+    : null
+  return { core: [nums[0] ?? 0, nums[1] ?? 0, nums[2] ?? 0], pre }
+}
+
+function compareSemver(left: SemVer, right: SemVer): number {
+  for (let i = 0; i < 3; i++) {
+    if (left.core[i] !== right.core[i]) return left.core[i] - right.core[i]
+  }
+  if (!left.pre && !right.pre) return 0
+  if (!left.pre) return 1
+  if (!right.pre) return -1
+  const length = Math.max(left.pre.length, right.pre.length)
+  for (let i = 0; i < length; i++) {
+    const a = left.pre[i]
+    const b = right.pre[i]
+    if (a === undefined) return -1
+    if (b === undefined) return 1
+    if (a === b) continue
+    const aNum = typeof a === 'number'
+    const bNum = typeof b === 'number'
+    if (aNum && bNum) return a - b
+    if (aNum) return -1
+    if (bNum) return 1
+    return a < b ? -1 : 1
+  }
+  return 0
 }
 
 function isNewer(remote: string, local: string): boolean {
-  const a = parseVersion(remote)
-  const b = parseVersion(local)
-  for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    const x = a[i] ?? 0
-    const y = b[i] ?? 0
-    if (x > y) return true
-    if (x < y) return false
-  }
-  return false
+  return compareSemver(parseSemver(remote), parseSemver(local)) > 0
 }
 
 function tagVersion(tag: string): string {
   return tag.replace(/^v/i, '')
 }
 
+const RELEASE_HEADERS = {
+  Accept: 'application/vnd.github+json',
+  'User-Agent': 'sieve-editor'
+}
+
+function releaseKind(tag: string): 'stable' | 'beta' | 'rc' | null {
+  const version = tag.replace(/^v/i, '')
+  if (/^\d+\.\d+\.\d+$/.test(version)) return 'stable'
+  if (/^\d+\.\d+\.\d+-beta\.\d+$/.test(version)) return 'beta'
+  if (/^\d+\.\d+\.\d+-rc\.\d+$/.test(version)) return 'rc'
+  return null
+}
+
+function channelAllows(tag: string, channel: UpdateChannel): boolean {
+  if (channel === 'off') return false
+  const kind = releaseKind(tag)
+  if (kind === 'stable') return true
+  if (channel === 'beta') return kind === 'beta' || kind === 'rc'
+  if (channel === 'rc') return kind === 'rc'
+  return false
+}
+
 async function latestRelease(): Promise<GithubRelease> {
-  const res = await fetch(FEED, {
-    headers: {
-      Accept: 'application/vnd.github+json',
-      'User-Agent': 'sieve-editor'
-    }
-  })
+  const res = await fetch(FEED, { headers: RELEASE_HEADERS })
   if (!res.ok) throw new Error(`GitHub releases ${res.status}`)
   return (await res.json()) as GithubRelease
+}
+
+async function listedReleases(): Promise<GithubRelease[]> {
+  const res = await fetch(RELEASES, { headers: RELEASE_HEADERS })
+  if (!res.ok) throw new Error(`GitHub releases ${res.status}`)
+  const body = (await res.json()) as unknown
+  if (!Array.isArray(body)) throw new Error('GitHub releases returned an unexpected list')
+  return body as GithubRelease[]
+}
+
+async function chosenRelease(): Promise<GithubRelease | null> {
+  const channel = getUpdateChannel()
+  if (channel === 'off') return null
+  if (channel === 'stable') return latestRelease()
+  const rows = (await listedReleases()).filter((release) => !release.draft && channelAllows(release.tag_name, channel))
+  rows.sort((left, right) =>
+    compareSemver(parseSemver(tagVersion(right.tag_name)), parseSemver(tagVersion(left.tag_name)))
+  )
+  return rows[0] ?? null
 }
 
 async function askToUpdate(version: string): Promise<boolean> {
@@ -297,11 +360,27 @@ export async function checkForUpdates(manual = false): Promise<void> {
     }
     return
   }
+  if (getUpdateChannel() === 'off') {
+    if (manual) {
+      await showBox({
+        type: 'info',
+        title: APP_NAME,
+        message: 'Updates are turned off.',
+        detail: 'Choose a channel in Settings to check again.',
+        buttons: ['OK']
+      })
+    }
+    return
+  }
   if (checking) return
   checking = true
   try {
     const kind = channel()
-    const release = await latestRelease()
+    const release = await chosenRelease()
+    if (!release) {
+      if (manual) await showUpToDate()
+      return
+    }
     const version = tagVersion(release.tag_name)
     if (!isNewer(version, app.getVersion())) {
       if (manual) await showUpToDate()

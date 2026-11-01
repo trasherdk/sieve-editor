@@ -5,8 +5,8 @@ import Database from 'better-sqlite3'
 import { and, desc, eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
-import type { AccountInput, AccountRecord, EditorPrefs, OpenTabs, TlsMode } from '../../shared/types'
-import { DEFAULT_INDENT_WITH_TABS, DEFAULT_TAB_SIZE } from '../../shared/types'
+import type { AccountInput, AccountRecord, EditorPrefs, OpenTabs, TlsMode, UpdateChannel } from '../../shared/types'
+import { DEFAULT_INDENT_WITH_TABS, DEFAULT_TAB_SIZE, normalizeUpdateChannel } from '../../shared/types'
 import { accounts, settings } from './schema'
 
 let sqlite: Database.Database | null = null
@@ -195,21 +195,33 @@ function clampTabSize(n: number): number {
   return Math.min(8, Math.max(1, Math.round(n)))
 }
 
+export function getUpdateChannel(): UpdateChannel {
+  const value = openDb().select().from(settings).where(eq(settings.id, 1)).get()?.updateChannel
+  return normalizeUpdateChannel(value)
+}
+
 export function getEditorPrefs(): EditorPrefs {
   const row = openDb().select().from(settings).where(eq(settings.id, 1)).get()
   return {
     indentWithTabs: row?.indentWithTabs ?? DEFAULT_INDENT_WITH_TABS,
-    tabSize: clampTabSize(row?.tabSize ?? DEFAULT_TAB_SIZE)
+    tabSize: clampTabSize(row?.tabSize ?? DEFAULT_TAB_SIZE),
+    updateChannel: normalizeUpdateChannel(row?.updateChannel)
   }
 }
 
-export function saveEditorPrefs(prefs: EditorPrefs): EditorPrefs {
-  const next = {
-    indentWithTabs: Boolean(prefs.indentWithTabs),
-    tabSize: clampTabSize(prefs.tabSize)
+export function saveEditorPrefs(prefs: Partial<EditorPrefs>): EditorPrefs {
+  const next: {
+    indentWithTabs?: boolean
+    tabSize?: number
+    updateChannel?: UpdateChannel
+  } = {}
+  if (typeof prefs.indentWithTabs === 'boolean') next.indentWithTabs = prefs.indentWithTabs
+  if (typeof prefs.tabSize === 'number') next.tabSize = clampTabSize(prefs.tabSize)
+  if (prefs.updateChannel != null) next.updateChannel = normalizeUpdateChannel(prefs.updateChannel)
+  if (Object.keys(next).length) {
+    openDb().update(settings).set(next).where(eq(settings.id, 1)).run()
   }
-  openDb().update(settings).set(next).where(eq(settings.id, 1)).run()
-  return next
+  return getEditorPrefs()
 }
 
 export function getUpdateDownloadDir(): string | null {

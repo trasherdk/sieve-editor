@@ -63,24 +63,19 @@ Unpackaged dir only: `pnpm.cmd run build:unpack`. Linux locally: `pnpm.cmd run b
 
 ## Release
 
-Ship from a **clean `develop`** that matches **`origin/develop`**:
+Ship from a clean `develop` that matches `origin/develop`. `main` is the release branch.
 
 ```bash
-cd sieve-editor
 pnpm release
+pnpm release:patch
+pnpm release:minor
+pnpm release:major
+pnpm release:patch -- beta
+pnpm release -- beta
+pnpm release -- rc
 ```
 
-Optional version bump first (`package.json` is currently **0.3.0**):
-
-```bash
-pnpm release -- --bump patch
-
-pnpm release -- --bump minor
-
-pnpm release -- --bump major
-```
-
-The script fails unless the current branch is `develop` and it matches `origin/develop`. If `origin/main` has commits that are not in `develop` (for example a previous merge commit), it merges `main` into `develop` first. After the Release PR is merged, it fast-forwards `develop` to `main` so **both branches are the same commit**, tags `vX.Y.Z`, and GitHub Actions **publishes** the GitHub Release (not a draft) with binaries, then writes **release notes from commits since the previous tag**. Creating that GitHub Release locally first will block the upload.
+`pnpm release:patch`, `release:minor`, and `release:major` move the version numbers. With `beta` or `rc`, that new version starts at `vX.Y.Z-beta.1` or `vX.Y.Z-rc.1`. Repeating `pnpm release -- beta` (or `rc`) on that same version increments the number (`beta.2`, `rc.2`). `pnpm release` with no channel then tags the stable `vX.Y.Z`. The script merges `develop` into `main`. That merge commit is `Release vX.Y.Z`, and its message lists the changes since the previous release. It then fast-forwards `develop` to that commit and pushes the tag. GitHub Actions publishes the GitHub Release with Windows (NSIS setup and portable) and Linux (AppImage and .deb) binaries, then writes notes from commits since the previous tag. Stable notes skip prerelease tags. `beta` and `rc` tags are GitHub prereleases. Settings chooses which of those the update check includes: beta includes rc and stable, rc includes stable, and Off skips the check. Do not create that GitHub Release locally. On the stable choice, a packaged beta is offered the stable release when it exists.
 
 | Platform | Installer | Portable |
 | --- | --- | --- |
@@ -89,7 +84,7 @@ The script fails unless the current branch is `develop` and it matches `origin/d
 
 Linux artifacts are built on Ubuntu runners; they are not tested on a local Linux desktop. macOS is not in this flow (no signing/notarization). `gh` must be logged in (`gh auth login -p ssh`).
 
-Packaged builds check GitHub Releases on startup (and when you click the version next to the app name). If a newer **published** release exists, the app asks whether to update, then a **download location** dialog (first time: setup defaults to Downloads, portable to the folder you launched from; after that, the last chosen folder). **NSIS** then offers to run the installer; **portable** / **AppImage** offer to restart into the new file and leave the old exe in place; **.deb** opens the GitHub download page. Draft or empty GitHub Releases are invisible to the updater. Builds are unsigned, so Windows may still warn on SmartScreen.
+Packaged builds check GitHub Releases on startup (and when you click the version next to the app name). **Settings** chooses the channel: Stable (published releases), Release candidate (rc and stable), Beta (beta, rc, and stable), or Off. A stable release of the same version is newer than its beta or rc. If a newer release on that channel exists, the app asks whether to update, then a **download location** dialog (first time: setup defaults to Downloads, portable to the folder you launched from; after that, the last chosen folder). **NSIS** then offers to run the installer; **portable** / **AppImage** offer to restart into the new file and leave the old exe in place; **.deb** opens the GitHub download page. Draft or empty GitHub Releases are invisible to the updater. Builds are unsigned, so Windows may still warn on SmartScreen.
 
 The Windows setup wizard asks where to install (not one-click). Shortcut and window title are **Sieve Editor**, with the version next to the name.
 

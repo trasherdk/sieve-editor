@@ -22,5 +22,6 @@ export const settings = sqliteTable('settings', {
   windowHeight: integer('window_height'),
   indentWithTabs: integer('indent_with_tabs', { mode: 'boolean' }).notNull().default(true),
   tabSize: integer('tab_size').notNull().default(4),
-  updateDownloadDir: text('update_download_dir')
+  updateDownloadDir: text('update_download_dir'),
+  updateChannel: text('update_channel').notNull().default('stable')
 })
